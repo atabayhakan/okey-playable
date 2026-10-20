@@ -1,16 +1,19 @@
 import { botPlanDiscard, botWantsDiscard } from '../core/bot';
 import {
   canDraw,
+  canShowIndicator,
   canTakeDiscard,
   dealRound,
   declareWin,
   discardTile,
   drawFromPile,
   nextSeat,
+  showIndicator,
   takeDiscard,
   type RoundState,
 } from '../core/game';
 import { randomSeed } from '../core/rng';
+import { isMatchOver, matchLeaders, newMatch, scoreRound, type MatchState } from '../core/scoring';
 import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
 import { arrangePairs, arrangeRuns, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
@@ -26,7 +29,7 @@ const NOTICE_MS = 2200;
 /** Interstitial ads only at a natural break: before every Nth new hand. */
 const HANDS_PER_INTERSTITIAL = 2;
 
-export type Notice = 'invalidFinish';
+export type Notice = { kind: 'invalidFinish' } | { kind: 'indicatorShown'; seat: number };
 
 interface Deps {
   platform: Platform;
@@ -39,11 +42,14 @@ function freshRound(starter: number): { round: RoundState; rack: Rack } {
   return { round, rack: arrangeRuns(round.hands[HUMAN], round.okey) };
 }
 
-/** Owns the game state, runs the bots and saves progress. The view only reads and calls in. */
+/** Owns the game state, runs the bots, keeps score and saves progress. The view only reads and calls in. */
 export class Controller {
   round: RoundState;
   rack: Rack;
+  match: MatchState;
   stats: Stats;
+  /** What each seat lost in the hand that just ended; null until a hand ends this session. */
+  lastPenalties: number[] | null = null;
   selected: number | null = null;
   lastDrawn: number | null = null;
   notice: Notice | null = null;
@@ -53,6 +59,8 @@ export class Controller {
   private cancelNotice: (() => void) | null = null;
   private advancing = false;
   private handsSinceAd = 0;
+  /** A hand dealt at startup is not in the save yet. */
+  private dealtOnLoad = false;
 
   /** `canSave` is false when loading failed: saving then would wipe the player's progress. */
   constructor(
@@ -61,11 +69,15 @@ export class Controller {
     private readonly canSave: boolean,
   ) {
     this.stats = { ...save.stats };
+    this.match = { points: [...save.match.points], hands: save.match.hands };
     if (save.round && save.round.phase !== 'roundOver') {
       this.round = save.round;
       this.rack = reconcileRack(save.rack ?? [], save.round.hands[HUMAN]);
     } else {
+      // The player left on the result screen: that hand is already scored, so move on.
+      if (isMatchOver(this.match)) this.match = newMatch();
       ({ round: this.round, rack: this.rack } = freshRound(save.round ? nextSeat(save.round.starter) : HUMAN));
+      this.dealtOnLoad = true;
     }
   }
 
@@ -76,11 +88,17 @@ export class Controller {
 
   /** Call once the game is interactive (after gameReady). */
   begin(): void {
+    // Save it now, or reloading would deal a different hand.
+    if (this.dealtOnLoad) void this.persist();
     this.scheduleBot();
   }
 
   get humanMustDiscard(): boolean {
     return this.round.turn === HUMAN && this.round.phase === 'discard';
+  }
+
+  get matchOver(): boolean {
+    return isMatchOver(this.match);
   }
 
   humanDraw(): void {
@@ -89,6 +107,13 @@ export class Controller {
 
   humanTakeDiscard(): void {
     if (canTakeDiscard(this.round, HUMAN)) this.receive(takeDiscard(this.round, HUMAN));
+  }
+
+  humanShowIndicator(): void {
+    if (!canShowIndicator(this.round, HUMAN)) return;
+    showIndicator(this.round, HUMAN);
+    this.showNotice({ kind: 'indicatorShown', seat: HUMAN });
+    void this.persist();
   }
 
   humanDiscard(tileId: number): void {
@@ -101,7 +126,7 @@ export class Controller {
   humanFinish(tileId: number): void {
     if (!this.humanMustDiscard) return;
     if (!declareWin(this.round, HUMAN, tileId)) {
-      this.showNotice('invalidFinish');
+      this.showNotice({ kind: 'invalidFinish' });
       return;
     }
     this.release(tileId);
@@ -132,6 +157,7 @@ export class Controller {
     this.changed();
   }
 
+  /** From the result screen: the next hand, or a new match once someone has hit zero. */
   async nextHand(): Promise<void> {
     if (this.round.phase !== 'roundOver' || this.advancing) return;
     this.advancing = true;
@@ -143,7 +169,9 @@ export class Controller {
       }
       this.cancelBot?.();
       this.cancelBot = null;
+      if (this.matchOver) this.match = newMatch();
       ({ round: this.round, rack: this.rack } = freshRound(nextSeat(this.round.starter)));
+      this.lastPenalties = null;
       this.selected = null;
       this.lastDrawn = null;
       this.clearNotice();
@@ -157,7 +185,7 @@ export class Controller {
 
   async persist(): Promise<void> {
     if (!this.canSave) return;
-    const save: SaveData = { v: SAVE_VERSION, stats: this.stats, round: this.round, rack: this.rack };
+    const save: SaveData = { v: SAVE_VERSION, stats: this.stats, match: this.match, round: this.round, rack: this.rack };
     try {
       await this.deps.platform.saveData(serializeSave(save));
     } catch {
@@ -188,8 +216,13 @@ export class Controller {
   }
 
   private finishRound(): void {
+    this.lastPenalties = scoreRound(this.match, this.round);
     this.stats.played++;
     if (this.round.winner === HUMAN) this.stats.won++;
+    if (this.matchOver) {
+      this.stats.matchesPlayed++;
+      if (matchLeaders(this.match).includes(HUMAN)) this.stats.matchesWon++;
+    }
     void this.persist();
     // The score sent must match the best score in the save: total hands won.
     this.deps.platform.sendScore(this.stats.won).catch(() => this.deps.platform.logWarning());
@@ -208,6 +241,11 @@ export class Controller {
   private botStep(): void {
     const r = this.round;
     const seat = r.turn;
+    // Bots always take the gösterge point when they can.
+    if (canShowIndicator(r, seat)) {
+      showIndicator(r, seat);
+      this.showNotice({ kind: 'indicatorShown', seat });
+    }
     if (r.phase === 'draw') {
       if (botWantsDiscard(r, seat)) takeDiscard(r, seat);
       else drawFromPile(r, seat);

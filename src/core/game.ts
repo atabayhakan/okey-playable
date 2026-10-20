@@ -24,6 +24,10 @@ export interface RoundState {
   winner: number | null;
   winKind: WinKind | null;
   finishTile: Tile | null;
+  /** Turns each seat has completed this round; a turn ends with a discard. */
+  turnsTaken: number[];
+  /** Seat that showed a copy of the indicator (gösterge), if any. */
+  indicatorShownBy: number | null;
 }
 
 export const nextSeat = (seat: number): number => (seat + 1) % SEATS;
@@ -46,6 +50,8 @@ export function dealRound(seed: number, starter: number): RoundState {
     winner: null,
     winKind: null,
     finishTile: null,
+    turnsTaken: new Array<number>(SEATS).fill(0),
+    indicatorShownBy: null,
   };
 }
 
@@ -55,6 +61,32 @@ export function canDraw(r: RoundState, seat: number): boolean {
 
 export function canTakeDiscard(r: RoundState, seat: number): boolean {
   return r.phase === 'draw' && r.turn === seat && r.discards[previousSeat(seat)].length > 0;
+}
+
+/** The tile in seat's hand identical to the indicator, if any (there are two of every tile). */
+export function indicatorTwin(r: RoundState, seat: number): Tile | null {
+  const { color, value } = r.indicator;
+  return r.hands[seat].find((t) => t.kind === 'number' && t.color === color && t.value === value) ?? null;
+}
+
+/**
+ * Gösterge: only on the seat's first turn, before it draws. The starter is dealt 15 tiles
+ * and never draws on its first turn, so it may show until its first discard.
+ */
+export function canShowIndicator(r: RoundState, seat: number): boolean {
+  const beforeFirstDraw = r.phase === 'draw' || (r.phase === 'discard' && seat === r.starter);
+  return (
+    r.turn === seat &&
+    r.turnsTaken[seat] === 0 &&
+    beforeFirstDraw &&
+    r.indicatorShownBy === null &&
+    indicatorTwin(r, seat) !== null
+  );
+}
+
+export function showIndicator(r: RoundState, seat: number): void {
+  if (!canShowIndicator(r, seat)) throw new Error(`Seat ${seat} cannot show the indicator now`);
+  r.indicatorShownBy = seat;
 }
 
 export function drawFromPile(r: RoundState, seat: number): Tile {
@@ -76,6 +108,7 @@ export function takeDiscard(r: RoundState, seat: number): Tile {
 export function discardTile(r: RoundState, seat: number, tileId: number): Tile {
   const tile = removeFromHand(r, seat, tileId);
   r.discards[seat].push(tile);
+  r.turnsTaken[seat]++;
   if (r.pile.length === 0) {
     r.phase = 'roundOver';
   } else {

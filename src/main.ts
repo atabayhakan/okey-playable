@@ -37,6 +37,8 @@ async function boot(): Promise<void> {
   const game = new Controller({ platform, scheduler, sound }, loaded.save, loaded.ok);
   const view = new View(document.getElementById('app')!, game, strings);
   game.subscribe(() => view.render());
+  // Dev only (stripped from builds): poke at the state from the console.
+  if (import.meta.env.DEV) Object.assign(window, { okeyGame: game, okeyView: view });
 
   platform.onPause(() => {
     scheduler.pause();

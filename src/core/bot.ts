@@ -1,5 +1,6 @@
 import { previousSeat, type RoundState } from './game';
-import { findWinningDiscard } from './hand';
+import { findWinningDiscard, winningKind } from './hand';
+import { finishPenalty } from './scoring';
 import { resolve, type Face, type Tile } from './tile';
 
 /** A discard is worth taking if it already links with about two tiles in hand. */
@@ -43,9 +44,25 @@ export function botWantsDiscard(r: RoundState, seat: number): boolean {
   return tileValue(offer, hand, r.okey) >= TAKE_THRESHOLD;
 }
 
+/** The finishing discard that costs the others the most (e.g. throwing the okey), or null. */
+function bestFinish(hand: readonly Tile[], okey: Face): Tile | null {
+  let best: Tile | null = null;
+  let bestPenalty = 0;
+  for (const tile of hand) {
+    const kind = winningKind(hand.filter((t) => t !== tile), okey);
+    if (!kind) continue;
+    const penalty = finishPenalty(kind, resolve(tile, okey).wild);
+    if (penalty > bestPenalty) {
+      best = tile;
+      bestPenalty = penalty;
+    }
+  }
+  return best;
+}
+
 export function botPlanDiscard(r: RoundState, seat: number): { tileId: number; win: boolean } {
   const hand = r.hands[seat];
-  const winning = findWinningDiscard(hand, r.okey);
+  const winning = bestFinish(hand, r.okey);
   if (winning) return { tileId: winning.id, win: true };
   let worst = hand[0];
   let worstScore = Infinity;

@@ -1,12 +1,13 @@
 {
   "name": "okey-playable",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Okey tile game for YouTube Playables",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/check-bundle.mjs",
+    "package": "npm run build && node scripts/package.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

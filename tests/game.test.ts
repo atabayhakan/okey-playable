@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { arrangePairs, arrangeRuns, RACK_SLOTS } from '../src/app/rack';
-import { parseSave, serializeSave, emptySave } from '../src/app/save';
+import { emptySave, parseSave, SAVE_VERSION, serializeSave } from '../src/app/save';
+import { newMatch } from '../src/core/scoring';
 import { botPlanDiscard, botWantsDiscard } from '../src/core/bot';
 import { TILE_COUNT } from '../src/core/deck';
 import { dealRound, declareWin, discardTile, drawFromPile, takeDiscard, type RoundState } from '../src/core/game';
@@ -76,14 +77,33 @@ describe('rack', () => {
 
 describe('save', () => {
   it('round-trips a game in progress', () => {
-    const save = { ...emptySave(), stats: { played: 3, won: 1 }, round: dealRound(9, 1), rack: null };
+    const save = {
+      ...emptySave(),
+      stats: { played: 3, won: 1, matchesPlayed: 1, matchesWon: 0 },
+      match: { points: [18, 14, 20, 16], hands: 3 },
+      round: dealRound(9, 1),
+      rack: null,
+    };
     expect(parseSave(serializeSave(save))).toEqual(save);
   });
 
   it('keeps stats but drops a corrupted round', () => {
-    const save = parseSave(JSON.stringify({ v: 1, stats: { played: 5, won: 2 }, round: { pile: [] } }));
-    expect(save.stats).toEqual({ played: 5, won: 2 });
+    const save = parseSave(JSON.stringify({ v: 2, stats: { played: 5, won: 2 }, match: { points: [1, 2], hands: 0 }, round: { pile: [] } }));
+    expect(save.stats).toEqual({ played: 5, won: 2, matchesPlayed: 0, matchesWon: 0 });
+    expect(save.match).toEqual(newMatch());
     expect(save.round).toBeNull();
+  });
+
+  it('upgrades a v1 save, keeping its hand in progress', () => {
+    const { turnsTaken: _t, indicatorShownBy: _i, ...v1Round } = dealRound(9, 1);
+    const save = parseSave(JSON.stringify({ v: 1, stats: { played: 5, won: 2 }, round: v1Round, rack: [] }));
+    expect(save.v).toBe(SAVE_VERSION);
+    expect(save.stats).toEqual({ played: 5, won: 2, matchesPlayed: 0, matchesWon: 0 });
+    expect(save.match).toEqual(newMatch());
+    expect(save.round?.hands).toEqual(v1Round.hands);
+    // Turns played before the upgrade are unknown, so nobody may show the indicator in that hand.
+    expect(save.round?.turnsTaken).toEqual([1, 1, 1, 1]);
+    expect(save.round?.indicatorShownBy).toBeNull();
   });
 
   it('starts fresh from empty or broken data', () => {

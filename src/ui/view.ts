@@ -1,6 +1,8 @@
 import { HUMAN, type Controller } from '../app/controller';
 import { RACK_SLOTS } from '../app/rack';
-import { canDraw, canTakeDiscard, previousSeat } from '../core/game';
+import { canDraw, canShowIndicator, canTakeDiscard, previousSeat, SEATS } from '../core/game';
+import { winningGroups } from '../core/hand';
+import { finishedWithOkey, matchLeaders, START_POINTS } from '../core/scoring';
 import { resolve, type Color, type Tile } from '../core/tile';
 import type { Strings } from '../i18n';
 
@@ -118,7 +120,7 @@ export class View {
         this.center(),
         this.seat(1, 'right'),
         this.discardPile(3, 'bl'),
-        h('div', { class: `status${this.game.notice ? ' notice' : ''}`, role: 'status', 'aria-live': 'polite' }, this.statusText()),
+        h('div', { class: `status${this.game.notice ? ` notice ${this.game.notice.kind}` : ''}`, role: 'status', 'aria-live': 'polite' }, this.statusText()),
         this.discardPile(0, 'br'),
       ),
       this.toolbar(),
@@ -126,16 +128,27 @@ export class View {
     );
   }
 
+  private seatName(seat: number): string {
+    return seat === HUMAN ? this.t.you : this.t.botNames[seat - 1];
+  }
+
   private seat(seat: number, area: string): HTMLElement {
     const r = this.game.round;
-    const name = this.t.botNames[seat - 1];
+    const name = this.seatName(seat);
     const active = r.turn === seat && r.phase !== 'roundOver';
     return h(
       'div',
       { class: `seat ${area}${active ? ' active' : ''}` },
       h('div', { class: 'avatar', 'aria-hidden': 'true' }, name[0]),
       h('div', { class: 'name' }, name),
-      h('div', { class: 'count' }, this.t.tiles(r.hands[seat].length)),
+      // Points and tile count share a line so the seat is no taller than before scoring.
+      h(
+        'div',
+        { class: 'meta' },
+        h('span', { class: 'points' }, this.t.points(this.game.match.points[seat])),
+        ' · ',
+        h('span', { class: 'count' }, this.t.tiles(r.hands[seat].length)),
+      ),
     );
   }
 
@@ -169,21 +182,38 @@ export class View {
         h('span', { class: 'tile back' }),
         h('span', { class: 'pile-count' }, String(r.pile.length)),
       ),
-      h('div', { class: 'indicator' }, this.tile(r.indicator), h('span', { class: 'caption' }, t.indicator)),
+      h('div', { class: 'indicator' }, this.tile(r.indicator), this.indicatorCaption()),
       h('button', { class: `finish${finishing ? ' target' : ''}`, 'data-action': 'finish', 'data-drop': 'finish', 'data-key': 'finish', disabled: !finishing }, t.finish),
     );
   }
 
+  /** "Gösterge", a Show button while the player may show it, or who showed it. */
+  private indicatorCaption(): HTMLElement {
+    const r = this.game.round;
+    const t = this.t;
+    if (r.indicatorShownBy !== null) {
+      const text = r.indicatorShownBy === HUMAN ? t.indicatorShownByYou : t.indicatorShownBy(this.seatName(r.indicatorShownBy));
+      return h('span', { class: 'caption shown' }, text);
+    }
+    if (canShowIndicator(r, HUMAN)) {
+      return h('button', { class: 'chip show', 'data-action': 'show-indicator', 'data-key': 'show-indicator', 'aria-label': t.showIndicatorLabel, title: t.showIndicatorLabel }, t.showIndicator);
+    }
+    return h('span', { class: 'caption' }, t.indicator);
+  }
+
   private statusText(): string {
     const { round: r, notice } = this.game;
+    const t = this.t;
     if (r.phase === 'roundOver') return '';
-    if (notice === 'invalidFinish') return this.t.invalidFinish;
-    if (r.turn === HUMAN) return r.phase === 'draw' ? this.t.drawPrompt : this.t.discardPrompt;
-    return this.t.waiting(this.t.botNames[r.turn - 1]);
+    if (notice?.kind === 'invalidFinish') return t.invalidFinish;
+    if (notice?.kind === 'indicatorShown') return notice.seat === HUMAN ? t.youShowedIndicator : t.indicatorNotice(this.seatName(notice.seat));
+    if (r.turn === HUMAN) return r.phase === 'draw' ? t.drawPrompt : t.discardPrompt;
+    return t.waiting(this.seatName(r.turn));
   }
 
   private toolbar(): HTMLElement {
     const t = this.t;
+    const { match } = this.game;
     return h(
       'div',
       { class: 'toolbar' },
@@ -193,7 +223,8 @@ export class View {
         h('button', { class: 'chip', 'data-action': 'sort-runs', 'data-key': 'sort-runs' }, t.sortRuns),
         h('button', { class: 'chip', 'data-action': 'sort-pairs', 'data-key': 'sort-pairs' }, t.sortPairs),
       ),
-      h('div', { class: 'score' }, t.stats(this.game.stats.won, this.game.stats.played)),
+      // While the result is up the hand counter already includes it; show the hand it was.
+      h('div', { class: 'score' }, t.yourPoints(match.points[HUMAN], this.game.round.phase === 'roundOver' ? match.hands : match.hands + 1)),
     );
   }
 
@@ -231,31 +262,68 @@ export class View {
   }
 
   private resultModal(): HTMLElement {
-    const { round: r, stats } = this.game;
+    const { round: r, stats, match, matchOver } = this.game;
     const t = this.t;
-    const title = r.winner === null ? t.drawnRound : r.winner === HUMAN ? t.youWon : t.someoneWon(t.botNames[r.winner - 1]);
-    const detail = r.winKind === 'pairs' ? t.byPairs : r.winKind === 'sets' ? t.bySets : '';
+    const title = r.winner === null ? t.drawnRound : r.winner === HUMAN ? t.youWon : t.someoneWon(this.seatName(r.winner));
+    const detail = r.winKind ? t.finishedWith(r.winKind === 'pairs', finishedWithOkey(r)) : '';
+    const leaders = matchLeaders(match);
+    const others = this.joinNames(leaders.filter((seat) => seat !== HUMAN).map((seat) => this.seatName(seat)));
+    const matchTitle = !leaders.includes(HUMAN) ? t.matchOverOther(others) : others ? t.matchOverYouAnd(others) : t.matchOverYou;
+    // Header and body scroll on short screens; the button below always stays visible.
     return h(
       'div',
       { class: 'modal-backdrop' },
       h(
         'div',
         { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'result-title' },
-        h('h2', { id: 'result-title' }, title),
-        detail && h('p', { class: 'detail' }, detail),
-        r.winner !== null && h('div', { class: 'hand' }, ...this.winningHand(r.winner).map((tile) => this.tile(tile))),
-        h('p', { class: 'score' }, t.stats(stats.won, stats.played)),
-        h('button', { class: 'primary', 'data-action': 'next-hand', 'data-key': 'next-hand' }, t.nextHand),
+        h(
+          'div',
+          { class: 'modal-body' },
+          matchOver && h('p', { class: 'match-over' }, matchTitle),
+          h('h2', { id: 'result-title' }, title),
+          detail && h('p', { class: 'detail' }, detail),
+          r.winner !== null && h('div', { class: 'hand' }, ...this.winningHand(r.winner)),
+          this.scoreTable(matchOver ? leaders : []),
+          h('p', { class: 'rule' }, t.matchRule(START_POINTS)),
+          h('p', { class: 'lifetime' }, t.lifetime(stats.won, stats.played, stats.matchesWon, stats.matchesPlayed)),
+        ),
+        h('button', { class: 'primary', 'data-action': 'next-hand', 'data-key': 'next-hand' }, matchOver ? t.newMatch : t.nextHand),
       ),
     );
   }
 
-  /** The player's own arrangement for the human; sorted for bots. */
-  private winningHand(seat: number): Tile[] {
-    const hand = this.game.round.hands[seat];
-    if (seat !== HUMAN) return hand;
-    const byId = new Map(hand.map((tile) => [tile.id, tile]));
-    return this.game.rack.flatMap((id) => (id !== null && byId.has(id) ? [byId.get(id)!] : []));
+  /** Each player's loss this hand and running total; the hand's winner and match leaders are marked. */
+  private scoreTable(leaders: number[]): HTMLElement {
+    const { round: r, match, lastPenalties } = this.game;
+    const [player, hand, points] = this.t.scoreHeader;
+    const rows = Array.from({ length: SEATS }, (_, seat) => {
+      const lost = lastPenalties?.[seat] ?? 0;
+      const cls = [seat === r.winner && 'winner', leaders.includes(seat) && 'leader', match.points[seat] <= 0 && 'out'].filter(Boolean).join(' ');
+      return h(
+        'tr',
+        { class: cls || undefined },
+        h('th', { scope: 'row' }, this.seatName(seat)),
+        h('td', {}, lost > 0 ? `−${lost}` : '0'),
+        h('td', {}, String(match.points[seat])),
+      );
+    });
+    return h(
+      'table',
+      { class: 'scores' },
+      h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, player), h('th', { scope: 'col' }, hand), h('th', { scope: 'col' }, points))),
+      h('tbody', {}, ...rows),
+    );
+  }
+
+  private joinNames(names: string[]): string {
+    return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} ${this.t.and} ${names.at(-1)}`;
+  }
+
+  /** The winner's tiles split into the melds or pairs that make it a win, each wild in place. */
+  private winningHand(seat: number): HTMLElement[] {
+    const r = this.game.round;
+    const groups = winningGroups(r.hands[seat], r.okey)?.groups ?? [r.hands[seat]];
+    return groups.map((group) => h('span', { class: 'meld' }, ...group.map((tile) => this.tile(tile))));
   }
 
   // ---- Input ------------------------------------------------------------------
@@ -275,6 +343,9 @@ export class View {
         break;
       case 'take':
         g.humanTakeDiscard();
+        break;
+      case 'show-indicator':
+        g.humanShowIndicator();
         break;
       case 'discard':
         if (g.selected !== null) g.humanDiscard(g.selected);

@@ -1,27 +1,41 @@
 import { TILE_COUNT } from '../core/deck';
 import { SEATS, type RoundState } from '../core/game';
+import { newMatch, type MatchState } from '../core/scoring';
 import type { Rack } from './rack';
 
 /**
  * Cloud save (ytgame.game.saveData). Bump SAVE_VERSION when the shape changes and add a
- * migration in `upgrade`: Playables certification requires older saves to keep loading.
+ * step in `upgrade`: Playables certification requires older saves to keep loading.
+ *
+ * v1: stats { played, won }, round, rack
+ * v2: + match points, match stats, round.turnsTaken / round.indicatorShownBy
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface Stats {
+  /** Hands played and won; `won` is the score sent to YouTube. */
   played: number;
   won: number;
+  matchesPlayed: number;
+  matchesWon: number;
 }
 
 export interface SaveData {
   v: number;
   stats: Stats;
+  match: MatchState;
   /** The hand in progress, so a player can leave and come back. */
   round: RoundState | null;
   rack: Rack | null;
 }
 
-export const emptySave = (): SaveData => ({ v: SAVE_VERSION, stats: { played: 0, won: 0 }, round: null, rack: null });
+export const emptySave = (): SaveData => ({
+  v: SAVE_VERSION,
+  stats: { played: 0, won: 0, matchesPlayed: 0, matchesWon: 0 },
+  match: newMatch(),
+  round: null,
+  rack: null,
+});
 
 export const serializeSave = (save: SaveData): string => JSON.stringify(save);
 
@@ -35,28 +49,60 @@ export function parseSave(raw: string): SaveData {
   }
 }
 
+type Raw = Record<string, unknown>;
+
 function upgrade(data: unknown): SaveData {
-  const d = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>;
+  let d = (isObject(data) ? data : {}) as Raw;
+  if (d.v === 1) d = v1ToV2(d);
+
   const save = emptySave();
-  const stats = (d.stats ?? {}) as Partial<Record<keyof Stats, unknown>>;
+  const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
   save.stats.played = count(stats.played);
   save.stats.won = Math.min(count(stats.won), save.stats.played);
-  // Future: `if (d.v === 1) migrate v1 -> v2` steps go here. Stats always carry over.
-  if (d.v === SAVE_VERSION && looksLikeRound(d.round)) {
+  save.stats.matchesPlayed = count(stats.matchesPlayed);
+  save.stats.matchesWon = Math.min(count(stats.matchesWon), save.stats.matchesPlayed);
+  if (d.v !== SAVE_VERSION) return save;
+
+  if (looksLikeMatch(d.match)) save.match = d.match;
+  if (looksLikeRound(d.round)) {
     save.round = d.round;
     save.rack = Array.isArray(d.rack) ? (d.rack as Rack) : null;
   }
   return save;
 }
 
+/** v1 had no match scoring and did not track turns or the indicator. */
+function v1ToV2(d: Raw): Raw {
+  const round = isObject(d.round) ? (d.round as Raw) : null;
+  return {
+    ...d,
+    v: 2,
+    match: newMatch(),
+    // Unknown how many turns were played, so treat first turns as done: no gösterge this hand.
+    round: round && { ...round, turnsTaken: new Array<number>(SEATS).fill(1), indicatorShownBy: null },
+  };
+}
+
+const isObject = (x: unknown): x is object => typeof x === 'object' && x !== null;
+
 const count = (x: unknown): number => (typeof x === 'number' && Number.isInteger(x) && x >= 0 ? x : 0);
 
+const isSeatList = (x: unknown): x is number[] =>
+  Array.isArray(x) && x.length === SEATS && x.every((n) => typeof n === 'number' && Number.isFinite(n));
+
+function looksLikeMatch(x: unknown): x is MatchState {
+  if (!isObject(x)) return false;
+  const m = x as Partial<MatchState>;
+  return isSeatList(m.points) && typeof m.hands === 'number' && m.hands >= 0;
+}
+
 function looksLikeRound(x: unknown): x is RoundState {
-  if (typeof x !== 'object' || x === null) return false;
+  if (!isObject(x)) return false;
   const r = x as Partial<RoundState>;
   if (!Array.isArray(r.pile) || !Array.isArray(r.hands) || !Array.isArray(r.discards)) return false;
   if (r.hands.length !== SEATS || r.discards.length !== SEATS || !r.indicator || !r.okey) return false;
-  if (typeof r.turn !== 'number' || typeof r.phase !== 'string') return false;
+  if (typeof r.turn !== 'number' || typeof r.phase !== 'string' || !isSeatList(r.turnsTaken)) return false;
+  if (r.indicatorShownBy !== null && typeof r.indicatorShownBy !== 'number') return false;
   const tiles =
     r.pile.length +
     r.hands.reduce((n, h) => n + h.length, 0) +

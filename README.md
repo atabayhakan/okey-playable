@@ -10,21 +10,41 @@ npm install
 npm run dev        # http://localhost:5180  (?lang=tr, ?audio=off)
 npm test           # kurallar, botlar, kayıt
 npm run build      # typecheck + build + Playables bundle denetimi
+npm run package    # build + release/okey-playable-v<sürüm>.zip (portala yüklenecek paket)
 ```
+
+YouTube'a yükleme durumu ve adımları: [docs/YOUTUBE_PLAYABLES.md](docs/YOUTUBE_PLAYABLES.md)
+
+## Puanlama (klasik "20'den düşme")
+
+| Durum | Diğer oyunculardan düşen |
+|---|---|
+| Normal bitiş (seri/per) | 2 |
+| Okey atarak bitiş | 4 |
+| Çiftten bitiş | 4 |
+| Çiftten, okey atarak bitiş | 8 |
+| Gösterge (göstergenin eşi elde; ilk turda, taş çekmeden) | 1 |
+| Taşlar biterse | 0 |
+
+Herkes 20 puanla başlar; bir elin sonunda biri 0 veya altına inerse maç biter, en yüksek
+puanlı kazanır (eşitlikte paylaşılır). Sahte okey atmak "okey atarak bitiş" sayılmaz.
+Değerler `src/core/scoring.ts` içinde. YouTube'a gönderilen skor kazanılan el sayısı.
 
 Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume()`,
 `okeyDev.setAudio(false)`, `okeyDev.clearSave()` ile YouTube olaylarını taklit edebilirsin.
+`okeyGame` / `okeyView` ile oyun durumuna doğrudan erişilebilir (yalnızca `npm run dev`; build'e girmez).
 
 ## Yapı
 
 | Klasör | İçerik |
 |---|---|
-| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), tur akışı, botlar |
-| `src/app/` | Kontrolcü (tur sırası, botları çalıştırma, kayıt), ıstaka düzeni, duraklatılabilir zamanlayıcı, ses |
+| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), tur akışı, gösterge, puanlama, botlar |
+| `src/app/` | Kontrolcü (tur sırası, botlar, maç puanı, kayıt + sürüm geçişi), ıstaka düzeni, duraklatılabilir zamanlayıcı, ses |
 | `src/platform/` | `ytgame` SDK sarmalayıcısı ve tipleri; Playables dışında yerel yedek |
 | `src/ui/` | Masa görünümü, sürükle-bırak, stiller |
 | `tests/` | Vitest testleri |
 | `scripts/check-bundle.mjs` | Build sonrası boyut ve yasak API denetimi |
+| `scripts/package.mjs` | `dist/` → portal için ZIP (bağımlılıksız) |
 
 ## Playables kurallarına uyum
 
@@ -46,7 +66,8 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 
 ## Yapılacaklar
 
-- [ ] Puanlama (ör. 101 / ceza puanı) ve maç yapısı
+- [x] Puanlama ve maç yapısı
+- [ ] İsteğe bağlı kurallar: renkli okey (kırmızı/siyah göstergede çift puan), tek renk bitiş, başlangıç puanı seçimi
 - [ ] Daha güçlü botlar (rakibe yarayacak taşı atmamak, çifte gitme kararı)
 - [ ] Animasyonlar (taş dağıtma, atma)
 - [ ] Ödüllü reklam: ör. "ipucu" (`requestRewardedAd`)

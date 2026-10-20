@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findWinningDiscard, winningKind } from '../src/core/hand';
+import { findWinningDiscard, winningGroups, winningKind } from '../src/core/hand';
 import { okeyFaceFor, type Color, type Face, type Tile } from '../src/core/tile';
 
 let nextId = 1000;
@@ -54,8 +54,45 @@ describe('winningKind', () => {
     expect(winningKind(hand, okey)).toBe('pairs');
   });
 
+  it('scores a hand that is both pairs and runs/sets as pairs (the bigger penalty)', () => {
+    const twice = (tiles: Tile[]) => [...tiles, ...tiles.map((t) => ({ ...t, id: nextId++ }))];
+    expect(winningKind(twice([...run('blue', 1, 3), ...run('black', 6, 9)]), okey)).toBe('pairs');
+    expect(winningKind(twice([n('red', 6), n('blue', 6), n('black', 6), ...run('yellow', 1, 4)]), okey)).toBe('pairs');
+  });
+
   it('needs exactly 14 tiles', () => {
     expect(winningKind(rest(), okey)).toBeNull();
+  });
+});
+
+describe('winningGroups', () => {
+  const letter: Record<Color, string> = { red: 'r', yellow: 'y', blue: 'u', black: 'k' };
+  const faces = (groups: Tile[][]) => groups.map((g) => g.map((t) => (t.kind === 'fake' ? 'F' : `${letter[t.color]}${t.value}`)).join(' '));
+
+  it('splits runs and sets, keeping each wild where it stands in', () => {
+    const hand = [n('red', 1), n('red', 5), n('red', 3), ...rest()];
+    const result = winningGroups(hand, okey)!;
+    expect(result.kind).toBe('sets');
+    expect(result.groups.flat()).toHaveLength(14);
+    expect(new Set(result.groups.flat().map((t) => t.id)).size).toBe(14);
+    // The red 5 is the okey, filling the 2 in red 1-2-3.
+    expect(faces(result.groups)).toContain('r1 r5 r3');
+    expect(faces(result.groups)).toContain('u7 u8 u9 u10');
+    expect(faces(result.groups)).toContain('k11 k12 k13 k1');
+    expect(faces(result.groups)).toContain('y4 u4 k4');
+  });
+
+  it('pairs identical tiles and gives a lone tile the okey', () => {
+    const pairs = (color: Color, value: number) => [n(color, value), n(color, value)];
+    const hand = [...pairs('red', 1), ...pairs('blue', 3), ...pairs('black', 9), ...pairs('yellow', 9), ...pairs('red', 12), ...pairs('blue', 13), n('yellow', 2), n('red', 5)];
+    const result = winningGroups(hand, okey)!;
+    expect(result.kind).toBe('pairs');
+    expect(result.groups).toHaveLength(7);
+    expect(faces(result.groups)).toContain('y2 r5');
+  });
+
+  it('returns null for a hand that does not win', () => {
+    expect(winningGroups([...rest(), n('red', 1), n('red', 9), n('blue', 12)], okey)).toBeNull();
   });
 });
 

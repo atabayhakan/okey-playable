@@ -7,6 +7,11 @@ export const WINNING_HAND_SIZE = 14;
 /** counts[colorIndex][value], value 1..13 (index 0 unused). */
 type Counts = number[][];
 
+/** A place in a meld: a concrete face, or null for a wild standing in. */
+type Slot = { c: number; v: number } | null;
+/** Melds found so far by the solver; on success it holds the whole split. */
+type Trail = Slot[][];
+
 /** Run position 14 is the 1 that may close a 12-13-1 run (13-1-2 is not allowed). */
 const WRAP_POS = 14;
 const valueAt = (pos: number) => (pos === WRAP_POS ? 1 : pos);
@@ -22,11 +27,15 @@ function tally(tiles: readonly Tile[], okey: Face): { counts: Counts; wilds: num
   return { counts, wilds };
 }
 
+/**
+ * Pairs is checked first: a hand that is both seven pairs and runs/sets scores as pairs,
+ * which always costs the other players at least as much.
+ */
 export function winningKind(tiles: readonly Tile[], okey: Face): WinKind | null {
   if (tiles.length !== WINNING_HAND_SIZE) return null;
   const { counts, wilds } = tally(tiles, okey);
-  if (canMeld(counts, wilds)) return 'sets';
   if (isPairs(counts, wilds)) return 'pairs';
+  if (canMeld(counts, wilds, [])) return 'sets';
   return null;
 }
 
@@ -42,6 +51,40 @@ export function findWinningDiscard(hand: readonly Tile[], okey: Face): Tile | nu
   return null;
 }
 
+/** How a winning hand splits: its pairs, or its runs and sets with each wild in place. */
+export function winningGroups(tiles: readonly Tile[], okey: Face): { kind: WinKind; groups: Tile[][] } | null {
+  const kind = winningKind(tiles, okey);
+  if (!kind) return null;
+  const faceKey = (c: number, v: number) => c * 100 + v;
+  const pool = new Map<number, Tile[]>();
+  const wildTiles: Tile[] = [];
+  for (const tile of tiles) {
+    const r = resolve(tile, okey);
+    if (r.wild) wildTiles.push(tile);
+    else {
+      const key = faceKey(COLORS.indexOf(r.color), r.value);
+      pool.set(key, [...(pool.get(key) ?? []), tile]);
+    }
+  }
+
+  if (kind === 'pairs') {
+    const groups: Tile[][] = [];
+    for (const key of [...pool.keys()].sort((a, b) => a - b)) {
+      const same = pool.get(key)!;
+      while (same.length >= 2) groups.push(same.splice(0, 2));
+      if (same.length === 1) groups.push([same[0], wildTiles.pop()!]);
+    }
+    while (wildTiles.length >= 2) groups.push(wildTiles.splice(0, 2));
+    return { kind, groups };
+  }
+
+  const { counts, wilds } = tally(tiles, okey);
+  const trail: Trail = [];
+  canMeld(counts, wilds, trail);
+  const groups = trail.map((meld) => meld.map((slot) => (slot === null ? wildTiles.pop()! : pool.get(faceKey(slot.c, slot.v))!.pop()!)));
+  return { kind, groups };
+}
+
 /** Seven pairs of identical tiles; a wild pairs with anything. */
 function isPairs(counts: Counts, wilds: number): boolean {
   let singles = 0;
@@ -52,14 +95,15 @@ function isPairs(counts: Counts, wilds: number): boolean {
 /**
  * Can every tile be split into runs (same color, consecutive, 3+) and groups
  * (same value, distinct colors, 3-4)? Takes the lowest remaining tile, tries every
- * meld it could belong to, and recurses. Counts are restored before returning.
+ * meld it could belong to, and recurses. Counts are restored before returning; on
+ * success `trail` holds the melds used.
  */
-function canMeld(counts: Counts, wilds: number): boolean {
+function canMeld(counts: Counts, wilds: number, trail: Trail): boolean {
   for (let c = 0; c < COLORS.length; c++) {
     for (let v = 1; v <= 13; v++) {
       if (counts[c][v] === 0) continue;
       counts[c][v]--;
-      const ok = meldAsGroup(counts, wilds, c, v) || meldAsRun(counts, wilds, c, v);
+      const ok = meldAsGroup(counts, wilds, c, v, trail) || meldAsRun(counts, wilds, c, v, trail);
       counts[c][v]++;
       return ok;
     }
@@ -68,62 +112,87 @@ function canMeld(counts: Counts, wilds: number): boolean {
   return wilds === 0;
 }
 
-function meldAsGroup(counts: Counts, wilds: number, c: number, v: number): boolean {
+/** Records `meld`, then tries to place everything else; undoes the record on failure. */
+function withMeld(meld: Slot[], counts: Counts, wilds: number, trail: Trail): boolean {
+  trail.push(meld);
+  if (canMeld(counts, wilds, trail)) return true;
+  trail.pop();
+  return false;
+}
+
+function meldAsGroup(counts: Counts, wilds: number, c: number, v: number, trail: Trail): boolean {
   const others = [0, 1, 2, 3].filter((o) => o !== c);
-  const pick = (i: number, size: number): boolean => {
+  const members: Slot[] = [{ c, v }];
+  const pick = (i: number): boolean => {
     if (i === others.length) {
-      for (let pad = 0; pad <= wilds && size + pad <= 4; pad++) {
-        if (size + pad >= 3 && canMeld(counts, wilds - pad)) return true;
+      for (let pad = 0; pad <= wilds && members.length + pad <= 4; pad++) {
+        if (members.length + pad < 3) continue;
+        if (withMeld([...members, ...new Array<Slot>(pad).fill(null)], counts, wilds - pad, trail)) return true;
       }
       return false;
     }
-    if (pick(i + 1, size)) return true;
+    if (pick(i + 1)) return true;
     const o = others[i];
     if (counts[o][v] === 0) return false;
     counts[o][v]--;
-    const ok = pick(i + 1, size + 1);
+    members.push({ c: o, v });
+    const ok = pick(i + 1);
+    members.pop();
     counts[o][v]++;
     return ok;
   };
-  return pick(0, 1);
+  return pick(0);
 }
 
-function meldAsRun(counts: Counts, wilds: number, c: number, v: number): boolean {
+function meldAsRun(counts: Counts, wilds: number, c: number, v: number, trail: Trail): boolean {
   // The tile is the lowest real tile of the run; wilds may stand in below it.
   for (let lead = 0; lead <= wilds && v - lead >= 1; lead++) {
     const start = v - lead;
-    if (extendRun(counts, wilds - lead, c, v + 1, lead + 1, start === 1 ? 13 : WRAP_POS)) return true;
+    const run: Slot[] = [...new Array<Slot>(lead).fill(null), { c, v }];
+    if (extendRun(counts, wilds - lead, c, v + 1, run, start === 1 ? 13 : WRAP_POS, trail)) return true;
   }
   // A 1 may instead be the top of a ...12-13-1 run.
   if (v === 1) {
     for (let start = 12; start >= 2; start--) {
-      if (fillRun(counts, wilds, c, start, 13)) return true;
+      if (fillRun(counts, wilds, c, start, [], { c, v }, trail)) return true;
     }
   }
   return false;
 }
 
-function extendRun(counts: Counts, wilds: number, c: number, pos: number, length: number, lastPos: number): boolean {
-  if (length >= 3 && canMeld(counts, wilds)) return true;
+function extendRun(counts: Counts, wilds: number, c: number, pos: number, run: Slot[], lastPos: number, trail: Trail): boolean {
+  if (run.length >= 3 && withMeld([...run], counts, wilds, trail)) return true;
   if (pos > lastPos) return false;
   const v = valueAt(pos);
   if (counts[c][v] > 0) {
     counts[c][v]--;
-    const ok = extendRun(counts, wilds, c, pos + 1, length + 1, lastPos);
+    run.push({ c, v });
+    const ok = extendRun(counts, wilds, c, pos + 1, run, lastPos, trail);
+    run.pop();
     counts[c][v]++;
     if (ok) return true;
   }
-  return wilds > 0 && extendRun(counts, wilds - 1, c, pos + 1, length + 1, lastPos);
+  if (wilds === 0) return false;
+  run.push(null);
+  const ok = extendRun(counts, wilds - 1, c, pos + 1, run, lastPos, trail);
+  run.pop();
+  return ok;
 }
 
-/** Every position from pos..lastPos must be filled, by a real tile or a wild. */
-function fillRun(counts: Counts, wilds: number, c: number, pos: number, lastPos: number): boolean {
-  if (pos > lastPos) return canMeld(counts, wilds);
+/** Fills every position from pos up to 13 (real tile or wild), then closes the run with the 1. */
+function fillRun(counts: Counts, wilds: number, c: number, pos: number, run: Slot[], closer: Slot, trail: Trail): boolean {
+  if (pos > 13) return withMeld([...run, closer], counts, wilds, trail);
   if (counts[c][pos] > 0) {
     counts[c][pos]--;
-    const ok = fillRun(counts, wilds, c, pos + 1, lastPos);
+    run.push({ c, v: pos });
+    const ok = fillRun(counts, wilds, c, pos + 1, run, closer, trail);
+    run.pop();
     counts[c][pos]++;
     if (ok) return true;
   }
-  return wilds > 0 && fillRun(counts, wilds - 1, c, pos + 1, lastPos);
+  if (wilds === 0) return false;
+  run.push(null);
+  const ok = fillRun(counts, wilds - 1, c, pos + 1, run, closer, trail);
+  run.pop();
+  return ok;
 }
