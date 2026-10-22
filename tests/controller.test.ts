@@ -121,3 +121,68 @@ describe('controller', () => {
     expect(restored.singleColor).toBe(true);
   });
 });
+
+describe('motion', () => {
+  it('tells the view where a drawn tile came from', () => {
+    const game = makeController();
+    game.pendingMotions = [];
+    game.round.turn = HUMAN;
+    game.round.phase = 'draw';
+    game.humanDraw();
+    // A draw can also complete a meld, so only the first motion is about the tile.
+    expect(game.pendingMotions[0]).toEqual({ kind: 'draw', tileId: expect.any(Number), seat: HUMAN });
+  });
+
+  it('tells the view where a taken tile came from', () => {
+    const game = makeController();
+    game.pendingMotions = [];
+    game.round.turn = HUMAN;
+    game.round.phase = 'draw';
+    // A tile on the pile of the player to the right.
+    game.round.discards[(HUMAN + 3) % 4].push(game.round.hands[1][0]);
+    game.humanTakeDiscard();
+    expect(game.pendingMotions).toEqual([
+      { kind: 'take', tileId: expect.any(Number), seat: HUMAN, from: (HUMAN + 3) % 4 },
+    ]);
+  });
+
+  it('tells the view where a thrown tile went', () => {
+    const game = makeController();
+    game.pendingMotions = [];
+    game.round.turn = HUMAN;
+    game.round.phase = 'discard';
+    const tileId = game.round.hands[HUMAN][0].id;
+    game.humanDiscard(tileId);
+    expect(game.pendingMotions).toEqual([{ kind: 'throw', tileId, seat: HUMAN, to: HUMAN }]);
+  });
+
+  it('shows a meld when a set or a run appears', () => {
+    const game = makeController();
+    const t = (color: 'red' | 'yellow' | 'blue' | 'black', value: number, id: number) => ({
+      id,
+      kind: 'number' as const,
+      color,
+      value,
+    });
+    // First a hand with no meld at all, so the count has to go up afterwards.
+    game.round.hands[HUMAN] = [
+      t('red', 1, 9201), t('red', 4, 9202), t('red', 7, 9203), t('red', 10, 9204),
+      t('blue', 2, 9205), t('blue', 5, 9206), t('blue', 8, 9207), t('blue', 11, 9208),
+      t('black', 3, 9209), t('black', 6, 9210), t('black', 9, 9211), t('black', 12, 9212),
+      t('yellow', 1, 9213), t('yellow', 14, 9214),
+    ];
+    game.sortMelds();
+    game.pendingMotions = [];
+
+    game.round.hands[HUMAN] = [
+      t('red', 3, 9101),
+      t('yellow', 3, 9102),
+      t('blue', 3, 9103),
+      ...game.round.hands[HUMAN].filter((x) => x.id < 9000).slice(0, 11),
+    ];
+    game.sortMelds();
+    const meld = game.pendingMotions.find((m) => m.kind === 'meld');
+    expect(meld).toBeDefined();
+    expect(meld && meld.kind === 'meld' ? meld.tileIds : []).toContain(9101);
+  });
+});

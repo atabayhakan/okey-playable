@@ -51,13 +51,46 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 `okeyDev.setAudio(false)`, `okeyDev.clearSave()` ile YouTube olaylarını taklit edebilirsin.
 `okeyGame` / `okeyView` ile oyun durumuna doğrudan erişilebilir (yalnızca `npm run dev`; build'e girmez).
 
+## Hareket katmanı
+
+Oyun bir "durum makinesi" gibi oynamasın diye her taşın nereden nereye gittiği
+görünür. Masa her değişiklikte baştan çizildiği için taş, hedefteki yerine
+giderken kaynak konumundan animasyonla taşınır (FLIP): kopyası çıkmaz, göz
+tek bir nesneyi takip eder.
+
+| Olay | Görünen |
+|---|---|
+| Oyuncu çekti | Taş desteden ızgaradaki yerine uçar |
+| Oyuncu aldı | Taş atış yığınından ızgaraya uçar |
+| Oyuncu attı | Taş ızakadan atış yığınına uçar |
+| Bot çekti | Desteden bir taş çıkar, botun avatarına uçup kaybolur |
+| Bot aldı | Yığındaki taş kalkar, botun avatarına uçup kaybolur |
+| Bot attı | Avatarın üstünden bir taş atış yığınına düşer |
+| Per/seri tamamlandı | O taşlar yeşil parlar |
+| Gösterge gösterildi | Gösterge taşı altın parlar |
+| El bitti | Masa bir an parlar, sonuç ekranı gelir |
+
+| Dosya | İçerik |
+|---|---|
+| `src/app/motion.ts` | `Motion` tipi: taş nereden nereye gitti |
+| `src/ui/flight.ts` | Dikdörtgen ölçümü, uçuş animasyonu, duraklatma takibi |
+| `src/ui/view.ts` | `render()` içinde ölçüm → yeniden çizim → animasyon |
+
+**Erişilebilirlik:** `prefers-reduced-motion: reduce` açıkta uçuşlar hiç
+oynanmaz, durum anında değişir, oyun aynı şekilde oynanır. Duraklatıldığında
+(`onPause`) uçan taşlar ve CSS animasyonları da dondurulur.
+
+**Tempo:** rakiplerin düşünme süresi zorluk seviyesine göre (kolay 1000/1100
+ms, normal 450/550 ms, zor 260/340 ms) ve taş uçuşu bu sürenin üstüne binerek
+olayı görünür kılar.
+
 ## Yapı
 
 | Klasör | İçerik |
 |---|---|
-| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), eldeki per/seri bulma, tur akışı, gösterge, puanlama, botlar || `src/app/` | Kontrolcü (tur sırası, botlar, maç puanı, kayıt + sürüm geçişi), ıstaka düzeni, duraklatılabilir zamanlayıcı, ses |
+| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), eldeki per/seri bulma, tur akışı, gösterge, puanlama, botlar || `src/app/` | Kontrolcü (tur sırası, botlar, maç puanı, kayıt + sürüm geçişi), ıstaka düzeni, duraklatılabilir zamanlayıcı, ses, hareket tanımları |
 | `src/platform/` | `ytgame` SDK sarmalayıcısı ve tipleri; Playables dışında yerel yedek |
-| `src/ui/` | Masa görünümü, sürükle-bırak, stiller |
+| `src/ui/` | Masa görünümü, sürükle-bırak, taş uçuşları, stiller |
 | `tests/` | Vitest testleri |
 | `scripts/check-bundle.mjs` | Build sonrası boyut ve yasak API denetimi |
 | `scripts/package.mjs` | `dist/` → portal için ZIP (bağımlılıksız) |

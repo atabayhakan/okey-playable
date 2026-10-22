@@ -1,4 +1,5 @@
 import { HUMAN, type Controller } from '../app/controller';
+import type { Motion } from '../app/motion';
 import type { Difficulty } from '../core/bot';
 import { GROUP_BREAK } from '../app/rack';
 import { canDraw, canShowIndicator, canTakeDiscard, previousSeat, SEATS } from '../core/game';
@@ -6,6 +7,11 @@ import { winningGroups } from '../core/hand';
 import { finishedWithOkey, isSingleColorHand, matchLeaders, START_POINTS } from '../core/scoring';
 import { resolve, type Color, type Tile } from '../core/tile';
 import type { Strings } from '../i18n';
+import { flash, flyAway, Flights, moveTo, rectOf, reducedMotion, type Rect } from './flight';
+
+/** Where each seat sits on the table, and where its discard pile is. */
+const SEAT_AREA: Record<number, string> = { 1: 'right', 2: 'top', 3: 'left' };
+const PILE_AREA: Record<number, string> = { 0: 'br', 1: 'tr', 2: 'tl', 3: 'bl' };
 
 const DRAG_THRESHOLD_PX = 6;
 /** Match lengths: the points everyone starts from. */
@@ -55,6 +61,8 @@ export class View {
   private ignoreClicksUntil = 0;
   /** Tiles that already form a complete set or run; marked on the rack. */
   private meldedIds = new Set<number>();
+  /** The running tile flights, so a pause can freeze them. */
+  private readonly flights: Flights;
 
   constructor(
     private readonly root: HTMLElement,
@@ -70,6 +78,7 @@ export class View {
     document.addEventListener('keydown', (e) => this.onKey(e));
     // Resizing only re-fits; the game state is untouched.
     new ResizeObserver(() => this.fit()).observe(root);
+    this.flights = new Flights(root);
   }
 
   render(): void {
@@ -80,11 +89,21 @@ export class View {
     }
     this.dirty = false;
     this.meldedIds = this.game.meldedTileIds;
+    // What happened on the table, and where the tiles were before the redraw.
+    const motions = this.game.pendingMotions;
+    this.game.pendingMotions = [];
+    // The rectangle has to be taken now: after the redraw the old element is
+    // detached and measures nothing.
+    const sources = motions.map((motion) => {
+      const element = this.motionSource(motion);
+      return element ? { element, rect: rectOf(element) } : null;
+    });
     const focusedKey = (document.activeElement as HTMLElement | null)?.dataset?.key;
     const modal = this.game.round.phase === 'roundOver' ? this.resultModal() : null;
     const coach = this.game.coachOpen ? this.coach() : null;
     this.root.replaceChildren(this.table(), ...(modal ? [modal] : []), ...(coach ? [coach] : []));
     this.fit();
+    motions.forEach((motion, index) => this.playMotion(motion, sources[index]));
     if (coach) {
       coach.querySelector<HTMLElement>('[data-action="close-coach"]')?.focus({ preventScroll: true });
     } else if (modal) {
@@ -210,6 +229,98 @@ export class View {
       this.rack(),
     );
   }
+
+  // ---- Motion ----------------------------------------------------------------
+
+  /**
+   * Where a moving tile was before the table was redrawn. The old element is
+   * still in the DOM when this runs, so the rectangle is the real one.
+   */
+  private motionSource(motion: Motion): HTMLElement | null {
+    switch (motion.kind) {
+      case 'draw':
+        return this.root.querySelector<HTMLElement>('.pile .tile.back');
+      case 'take':
+        return this.root.querySelector<HTMLElement>(`.discard.${PILE_AREA[motion.from]} .tile`);
+      case 'throw':
+        return motion.seat === HUMAN
+          ? this.root.querySelector<HTMLElement>(`.rack [data-tile-id="${motion.tileId}"]`)
+          : this.root.querySelector<HTMLElement>(`.seat.${SEAT_AREA[motion.seat]} .avatar`);
+      default:
+        return null;
+    }
+  }
+
+  /** Where a moving tile ends up. A tile lands on a tile; a bot's tile does not land at all. */
+  private motionTarget(motion: Motion): HTMLElement | null {
+    switch (motion.kind) {
+      case 'draw':
+      case 'take':
+        return motion.seat === HUMAN
+          ? this.root.querySelector<HTMLElement>(`.rack [data-tile-id="${motion.tileId}"]`)
+          : this.root.querySelector<HTMLElement>(`.seat.${SEAT_AREA[motion.seat]} .avatar`);
+      case 'throw':
+        return this.root.querySelector<HTMLElement>(`.discard.${PILE_AREA[motion.to]} .tile`);
+      default:
+        return null;
+    }
+  }
+
+  /** Shows what happened: a tile travels, a meld flashes, the gösterge glitters. */
+  private playMotion(motion: Motion, source: { element: HTMLElement; rect: Rect | null } | null): void {
+    if (reducedMotion()) return;
+    switch (motion.kind) {
+      case 'draw':
+      case 'take':
+      case 'throw': {
+        const target = this.motionTarget(motion);
+        if (target?.classList.contains('tile')) {
+          // The tile itself travels, so the eye follows one object.
+          const to = rectOf(target);
+          if (source?.rect && to) {
+            const animation = moveTo(target, source.rect, to);
+            if (animation) this.flights.track(animation);
+          }
+          return;
+        }
+        // A bot's hand is hidden, so the tile flies towards the seat and fades.
+        if (source && target) {
+          const to = rectOf(target);
+          if (to) {
+            const animation = flyAway(this.root, source.element, to, source.rect ?? undefined);
+            if (animation) this.flights.track(animation);
+          }
+        }
+        return;
+      }
+      case 'meld':
+        for (const id of motion.tileIds) {
+          const element = this.root.querySelector<HTMLElement>(`.rack [data-tile-id="${id}"]`);
+          if (element) flash(element, 'meld-flash');
+        }
+        return;
+      case 'indicator': {
+        const element = this.root.querySelector<HTMLElement>('.indicator .tile');
+        if (element) flash(element, 'indicator-flash');
+        return;
+      }
+      case 'win':
+        this.root.classList.add('winning');
+        window.setTimeout(() => this.root.classList.remove('winning'), 900);
+        return;
+    }
+  }
+
+  /** Freezes the movement while the game is paused. */
+  pauseMotion(): void {
+    this.flights.pause();
+  }
+
+  resumeMotion(): void {
+    this.flights.resume();
+  }
+
+  // ---- Motion ----------------------------------------------------------------
 
   private seatName(seat: number): string {
     return seat === HUMAN ? this.t.you : this.t.botNames[seat - 1];
@@ -362,12 +473,14 @@ export class View {
    * a grid of empty boxes.
    */
   private rack(): HTMLElement {
-    const byId = new Map(this.game.round.hands[HUMAN].map((tile) => [tile.id, tile]));
+    const hand = this.game.round.hands[HUMAN];
+    const byId = new Map(hand.map((tile) => [tile.id, tile]));
     const children: Child[] = [];
     // Only the used part of the rack is drawn. The trailing empty slots used to
     // be rendered as invisible cells, which still took a full tile width each
     // and pushed the hand off the bottom of the screen.
     const used = this.rackSlots();
+    const drawn = new Set<number>();
     for (let slot = 0; slot < used; slot++) {
       const id = this.game.rack[slot];
       if (id === GROUP_BREAK) {
@@ -381,7 +494,14 @@ export class View {
       }
       const tile = byId.get(id);
       // The deal cascades: each tile lands a beat after the one before it.
-      if (tile) children.push(this.tile(tile, true, slot));
+      if (tile) {
+        drawn.add(id);
+        children.push(this.tile(tile, true, slot));
+      }
+    }
+    // A tile in the hand but not on the rack still has to be seen.
+    for (const tile of hand) {
+      if (!drawn.has(tile.id)) children.push(this.tile(tile, true, used));
     }
     return h('div', { class: 'rack' }, ...children);
   }

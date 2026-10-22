@@ -9,6 +9,7 @@ import {
   discardTile,
   drawFromPile,
   nextSeat,
+  previousSeat,
   showIndicator,
   takeDiscard,
   type RoundState,
@@ -17,6 +18,7 @@ import { randomSeed } from '../core/rng';
 import { isMatchOver, matchLeaders, newMatch, scoreRound, handValue, START_POINTS, type MatchState, type RuleOptions } from '../core/scoring';
 import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
+import type { Motion } from './motion';
 import { arrangeMelds, arrangePairs, arrangeRuns, compactRack, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
 import { SAVE_VERSION, serializeSave, type SaveData, type Stats } from './save';
 import type { Scheduler } from './scheduler';
@@ -26,12 +28,14 @@ export const HUMAN = 0;
 
 /**
  * How long the opponents think before they move. An easy game gives the
- * player time to think, a hard one keeps the pressure on.
+ * player time to think, a hard one keeps the pressure on. The tile flight
+ * plays on top of this, so the player sees what happened before the next
+ * move starts.
  */
 const BOT_DELAY: Record<Difficulty, { draw: number; discard: number }> = {
-  easy: { draw: 900, discard: 1100 },
-  normal: { draw: 320, discard: 420 },
-  hard: { draw: 180, discard: 240 },
+  easy: { draw: 1000, discard: 1100 },
+  normal: { draw: 450, discard: 550 },
+  hard: { draw: 260, discard: 340 },
 };
 const NOTICE_MS = 2200;
 /** How long the dealt tiles take to land on the rack. */
@@ -73,6 +77,8 @@ export class Controller {
   discardingId: number | null = null;
   /** The one-time rules card is open. */
   coachOpen = false;
+  /** What happened on the table, waiting for the view to show it. */
+  pendingMotions: Motion[] = [];
   /** The tile the hint points at, if the hint is showing. */
   hintTileId: number | null = null;
   /** The free hint of this hand is spent; the next one costs a rewarded ad. */
@@ -199,17 +205,23 @@ export class Controller {
   }
 
   humanDraw(): void {
-    if (canDraw(this.round, HUMAN)) this.receive(drawFromPile(this.round, HUMAN));
+    if (!canDraw(this.round, HUMAN)) return;
+    const tile = drawFromPile(this.round, HUMAN);
+    this.receive(tile, { kind: 'draw', tileId: tile.id, seat: HUMAN });
   }
 
   humanTakeDiscard(): void {
-    if (canTakeDiscard(this.round, HUMAN)) this.receive(takeDiscard(this.round, HUMAN));
+    if (!canTakeDiscard(this.round, HUMAN)) return;
+    const from = previousSeat(HUMAN);
+    const tile = takeDiscard(this.round, HUMAN);
+    this.receive(tile, { kind: 'take', tileId: tile.id, seat: HUMAN, from });
   }
 
   humanShowIndicator(): void {
     if (!canShowIndicator(this.round, HUMAN)) return;
     showIndicator(this.round, HUMAN);
     this.showNotice({ kind: 'indicatorShown', seat: HUMAN });
+    this.pendingMotions.push({ kind: 'indicator', seat: HUMAN });
     this.deps.sound.show();
     void this.persist();
   }
@@ -218,6 +230,7 @@ export class Controller {
     if (!this.humanMustDiscard) return;
     discardTile(this.round, HUMAN, tileId);
     this.release(tileId);
+    this.pendingMotions.push({ kind: 'throw', tileId, seat: HUMAN, to: HUMAN });
     this.afterTurn();
   }
 
@@ -228,6 +241,7 @@ export class Controller {
       return;
     }
     this.release(tileId);
+    this.pendingMotions.push({ kind: 'win', seat: HUMAN });
     this.afterTurn();
   }
 
@@ -371,12 +385,13 @@ export class Controller {
     }
   }
 
-  private receive(tile: Tile): void {
+  private receive(tile: Tile, motion?: Motion): void {
     placeTile(this.rack, tile.id);
     this.lastDrawn = tile.id;
     // A new tile means a new decision: the old hint is stale.
     this.hintTileId = null;
     this.deps.sound.tile();
+    if (motion) this.pendingMotions.push(motion);
     this.changed();
   }
 
@@ -443,18 +458,30 @@ export class Controller {
     if (canShowIndicator(r, seat)) {
       showIndicator(r, seat);
       this.showNotice({ kind: 'indicatorShown', seat });
+      this.pendingMotions.push({ kind: 'indicator', seat });
       this.deps.sound.show();
     }
     if (r.phase === 'draw') {
-      if (botWantsDiscard(r, seat, this.difficulty)) takeDiscard(r, seat);
-      else drawFromPile(r, seat);
+      if (botWantsDiscard(r, seat, this.difficulty)) {
+        const from = previousSeat(seat);
+        const tile = takeDiscard(r, seat);
+        this.pendingMotions.push({ kind: 'take', tileId: tile.id, seat, from });
+      } else {
+        const tile = drawFromPile(r, seat);
+        this.pendingMotions.push({ kind: 'draw', tileId: tile.id, seat });
+      }
       this.deps.sound.tile();
       this.changed();
       this.scheduleBot();
       return;
     }
     const plan = botPlanDiscard(r, seat, this.difficulty);
-    if (!(plan.win && declareWin(r, seat, plan.tileId))) discardTile(r, seat, plan.tileId);
+    if (plan.win && declareWin(r, seat, plan.tileId)) {
+      this.pendingMotions.push({ kind: 'win', seat });
+    } else {
+      discardTile(r, seat, plan.tileId);
+      this.pendingMotions.push({ kind: 'throw', tileId: plan.tileId, seat, to: seat });
+    }
     this.deps.sound.throwTile();
     this.afterTurn();
   }
@@ -479,8 +506,15 @@ export class Controller {
   private changed(): void {
     // A complete set or run appears: say so.
     const melds = this.melds.length;
-    if (melds > this.lastMeldCount) this.deps.sound.meld();
+    if (melds > this.lastMeldCount) {
+      this.deps.sound.meld();
+      this.pendingMotions.push({ kind: 'meld', tileIds: this.meldedTileIdsArray() });
+    }
     this.lastMeldCount = melds;
     for (const listener of this.listeners) listener();
+  }
+
+  private meldedTileIdsArray(): number[] {
+    return this.melds.flat().map((tile) => tile.id);
   }
 }

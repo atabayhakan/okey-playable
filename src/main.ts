@@ -43,11 +43,15 @@ async function boot(): Promise<void> {
   platform.onPause(() => {
     scheduler.pause();
     sound.pause();
+    // A tile in flight has to freeze too, or the table keeps moving while the
+    // game is paused.
+    view.pauseMotion();
     void game.persist();
   });
   platform.onResume(() => {
     scheduler.resume();
     sound.resume();
+    view.resumeMotion();
   });
 
   view.render();
