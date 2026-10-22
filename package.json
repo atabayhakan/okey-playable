@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/check-bundle.mjs",
     "package": "npm run build && node scripts/package.mjs",
+    "assets": "npm run build && node scripts/shoot-assets.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

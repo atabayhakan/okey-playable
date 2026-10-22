@@ -44,7 +44,12 @@ Form: <https://docs.google.com/forms/d/e/1FAIpQLSdvdQ0lgIq2369aemj1O6w8R8FwGn9O5
    Başlıkta, açıklamada ve küçük resimlerde logo veya marka olmamalı.
 3. Bundle: `npm run package` → `release/okey-playable-v<sürüm>.zip` dosyasını yükle
    (`index.html` arşivin kökünde; build sırasında boyut ve yasaklı API denetimi otomatik yapılıyor).
-4. Küçük resimler: portalın istediği en-boy oranlarında. Ölçüler yalnızca portalda yazıyor.
+4. Küçük resimler: portalın istediği en-boy oranlarında. Ölçüler yalnızca portalda
+   yazıyor. Hazır olanlar `store/` altında: ikon 512×512 ve 1024×1024, kapak
+   1280×720 (16:9) ve 1080×1920 (9:16). Hepsi oyunun kendi sanatından üretildi,
+   **logo, marka ve yazı yok** (portal kuralı). Tasarım değişince
+   `npm run assets` ile yeniden üretilir; başka bir ölçü gerekiyorsa
+   `scripts/shoot-assets.mjs` içindeki `SHOTS` listesine ekle.
 5. Monetization: **Interstitial açık** (oyun her 2 elde bir, el arasında istiyor), **Rewarded kapalı**
    (henüz kullanılmıyor). Reklam açılırsa portalda monetization'ı da aç.
 6. **Save** → **Create release** ("Release Creation in Progress" birkaç dakika sürer).
@@ -59,3 +64,4 @@ Form: <https://docs.google.com/forms/d/e/1FAIpQLSdvdQ0lgIq2369aemj1O6w8R8FwGn9O5
 - [ ] YouTube'da sessize alınca oyun sessiz
 - [ ] Türkçe ve İngilizce metinler doğru
 - [ ] Kayıt: el ortasında çıkıp girince el kaldığı yerden devam ediyor
+- [ ] Mağaza görselleri yüklendi (`store/`) ve küçük resimlerde logo/marka yok

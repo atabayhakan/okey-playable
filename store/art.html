@@ -1,0 +1,176 @@
+<!doctype html>
+<!-- Store art for the Playables portal: the game's own look, no logo, no text.
+     Rendered by shoot-assets.mjs through Chrome and saved as PNG. -->
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="./index.css" />
+    <style>
+      body { margin: 0; overflow: hidden; }
+      .art {
+        position: relative;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(ellipse 70% 55% at 50% 30%, rgba(255, 255, 255, 0.09), transparent 70%),
+          radial-gradient(ellipse at 50% 34%, var(--felt-hi), var(--felt-mid) 58%, var(--felt-lo) 84%);
+      }
+      .art::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        opacity: 0.35;
+        background:
+          repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 4px),
+          repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.03) 0 2px, transparent 2px 4px);
+      }
+
+      .tile {
+        position: relative;
+        width: var(--tile-w);
+        height: calc(var(--tile-w) * 1.38);
+        border: 1px solid var(--tile-edge);
+        border-radius: calc(var(--tile-w) * 0.16);
+        background: linear-gradient(180deg, var(--tile-face-hi) 0%, var(--tile-face) 46%, #efe5d0 100%);
+        box-shadow:
+          0 calc(var(--tile-w) * 0.075) 0 var(--tile-side),
+          0 1px 0 rgba(0, 0, 0, 0.28),
+          0 3px 7px rgba(0, 0, 0, 0.3);
+        color: var(--c, var(--black));
+        font-size: calc(var(--tile-w) * 0.54);
+        font-weight: 800;
+        line-height: 1;
+        text-align: center;
+        padding-top: calc(var(--tile-w) * 0.13);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .tile::before {
+        content: '';
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 34%;
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 62%);
+        border-radius: inherit;
+      }
+      .tile[data-color='red'] { --c: var(--red); }
+      .tile[data-color='yellow'] { --c: var(--yellow); }
+      .tile[data-color='blue'] { --c: var(--blue); }
+      .tile[data-color='black'] { --c: var(--black); }
+      .tile.fake { --c: var(--fake); }
+      .tile .mark { display: block; font-size: 0.38em; margin-top: calc(var(--tile-w) * 0.03); }
+      .tile.wild::after {
+        content: '';
+        position: absolute;
+        top: 6%;
+        right: 8%;
+        width: 18%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+      }
+      .tile.back {
+        background: linear-gradient(160deg, #2f8a61, #1b5c40);
+        border-color: #134a33;
+        box-shadow: 2px 2px 0 #174d35, 4px 4px 0 #123d2a, 0 6px 10px rgba(0, 0, 0, 0.35);
+      }
+      .tile.back::before { display: none; }
+      .tile.back .value, .tile.back .mark { display: none; }
+
+      .avatar {
+        width: calc(var(--tile-w) * 1.05);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-size: calc(var(--tile-w) * 0.4);
+        color: #fff;
+        background: rgba(255, 255, 255, 0.16);
+        border: 2px solid var(--accent);
+        box-shadow: 0 0 0 4px rgba(255, 201, 74, 0.22);
+      }
+
+      .tray {
+        display: flex;
+        gap: calc(var(--tile-w) * 0.06);
+        padding: calc(var(--tile-w) * 0.22) calc(var(--tile-w) * 0.28);
+        border-radius: calc(var(--tile-w) * 0.25);
+        background: linear-gradient(180deg, var(--wood-hi), var(--wood-lo));
+        box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.18), inset 0 -3px 0 rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="art" id="art"></div>
+    <script type="module">
+      const art = document.getElementById('art');
+      const tile = (color, value, mark, cls = '') =>
+        `<div class="tile ${cls}" data-color="${color}"><span class="value">${value}</span><span class="mark">${mark}</span></div>`;
+
+      const views = {
+        // The icon: three tiles fanned, the okey in the middle.
+        icon: () => {
+          art.style.width = '512px';
+          art.style.height = '512px';
+          art.style.setProperty('--tile-w', '168px');
+          art.innerHTML = `<div style="position:relative;display:flex;align-items:center;justify-content:center">
+            <div class="tile" data-color="blue" style="position:absolute;transform:translate(-44%,6%) rotate(-13deg);z-index:1"><span class="value">3</span><span class="mark">■</span></div>
+            <div class="tile" data-color="red" style="position:absolute;transform:translate(0,-3%);z-index:3"><span class="value">7</span><span class="mark">●</span></div>
+            <div class="tile" data-color="black" style="position:absolute;transform:translate(44%,6%) rotate(13deg);z-index:2"><span class="value">12</span><span class="mark">◆</span></div>
+          </div>`;
+        },
+        // The cover: the table from above, the rack at the bottom.
+        cover: () => {
+          art.style.width = '1280px';
+          art.style.height = '720px';
+          art.style.setProperty('--tile-w', '92px');
+          art.innerHTML = `
+            <div style="position:absolute;inset:0;display:grid;grid-template-rows:1fr auto;align-items:center;padding:56px 80px 52px;gap:34px">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:0 90px">
+                <div class="avatar">A</div>
+                <div style="display:flex;align-items:center;gap:26px">
+                  <div class="tile back"></div>
+                  <div class="tile" data-color="yellow"><span class="value">8</span><span class="mark">▲</span></div>
+                </div>
+                <div class="tile" data-color="red"><span class="value">7</span><span class="mark">●</span></div>
+              </div>
+              <div class="tray" style="width:fit-content;margin:0 auto">
+                ${tile('red', '7', '●')}
+                ${tile('black', '5', '◆')}
+                ${tile('blue', '11', '■')}
+                ${tile('yellow', '4', '▲')}
+                ${tile('red', '9', '●')}
+                ${tile('black', '13', '◆', 'wild')}
+                ${tile('blue', '6', '■')}
+                ${tile('yellow', '2', '▲')}
+              </div>
+            </div>`;
+        },
+        // The portrait variant for the vertical placements.
+        portrait: () => {
+          art.style.width = '1080px';
+          art.style.height = '1920px';
+          art.style.setProperty('--tile-w', '190px');
+          art.innerHTML = `
+            <div style="position:absolute;inset:0;display:grid;grid-template-rows:1fr auto;align-items:center;padding:180px 120px 200px;gap:120px">
+              <div style="display:flex;align-items:center;justify-content:center;gap:60px">
+                <div class="tile back"></div>
+                <div class="tile" data-color="yellow"><span class="value">8</span><span class="mark">▲</span></div>
+              </div>
+              <div class="tray">
+                ${tile('red', '7', '●', 'wild')}
+                ${tile('black', '5', '◆')}
+                ${tile('blue', '11', '■')}
+              </div>
+            </div>`;
+        },
+      };
+
+      const view = new URLSearchParams(location.search).get('view') ?? 'icon';
+      views[view]();
+      document.title = `ready-${view}`;
+    </script>
+  </body>
+</html>

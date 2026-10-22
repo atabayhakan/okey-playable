@@ -11,6 +11,7 @@ npm run dev        # http://localhost:5180  (?lang=tr, ?audio=off)
 npm test           # kurallar, botlar, kayıt
 npm run build      # typecheck + build + Playables bundle denetimi
 npm run package    # build + release/okey-playable-v<sürüm>.zip (portala yüklenecek paket)
+npm run assets     # store/ altındaki mağaza görsellerini yeniden üretir (Chrome ister)
 ```
 
 YouTube'a yükleme durumu ve adımları: [docs/YOUTUBE_PLAYABLES.md](docs/YOUTUBE_PLAYABLES.md)
@@ -60,6 +61,24 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 | `tests/` | Vitest testleri |
 | `scripts/check-bundle.mjs` | Build sonrası boyut ve yasak API denetimi |
 | `scripts/package.mjs` | `dist/` → portal için ZIP (bağımlılıksız) |
+| `scripts/shoot-assets.mjs` | `store/` görsellerini oyunun kendi CSS'inden üretir |
+| `store/` | Mağaza görselleri: ikon 512/1024, kapak 16:9 ve 9:16 |
+
+## Mağaza görselleri
+
+`store/` altındaki görseller oyunun kendi sanatından üretiliyor: **logo, marka ve
+yazı yok** (portal kuralı). Üretim `store/art.html` + oyunun derlenmiş CSS'i ile
+yapılır, yani tasarım değişince `npm run assets` ile hepsi yeniden çıkar.
+
+| Dosya | Ölçü | Kullanım |
+|---|---|---|
+| `okey-icon-512.png` | 512×512 | Portal ikonu |
+| `okey-icon-1024.png` | 1024×1024 | Portal ikonu (büyük) |
+| `okey-cover-1280x720.png` | 1280×720 | Küçük resim (16:9) |
+| `okey-cover-1080x1920.png` | 1080×1920 | Küçük resim (9:16) |
+
+Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü gerektiğinde
+`scripts/shoot-assets.mjs` içindeki `SHOTS` listesine ekle.
 
 ## Playables kurallarına uyum
 
