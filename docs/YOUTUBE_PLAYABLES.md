@@ -1,14 +1,17 @@
 # YouTube Playables'a yükleme
 
-## Durum (21 Ekim 2026)
+## Durum (22 Ekim 2026)
 
 - Chrome'daki YouTube hesabıyla [Playables Developer Portal](https://www.youtube.com/playables_portal) açıldı.
   Sonuç: **"Unauthorized — Your channel is not authorized to use the Playables Developer Portal."**
   - Etkin kanal: **ULGEN Core** → yetkisiz.
   - Hesaptaki diğer profil **Hakan Atabay** → kanalı yok.
 - Portal davetle çalışıyor (Private Preview). Oyun yüklenebilmesi için önce bekleme listesine
-  başvurmak ve YouTube'dan kabul almak gerekiyor. Bu adım atlanamıyor.
+  başvurmak ve YouTube'dan kabul almak gerekiyor. Bu adım atlanamaz.
 - Başvuru formu senin adına yasal beyan içerdiği için (aşağıda) gönderilmedi; senin onayına bırakıldı.
+- **Oynanabilir bağlantı hazır**: <https://atabayhakan.github.io/okey-playable/> (GitHub Pages,
+  `main` dalına push olunca otomatik). Repo herkese açık; bekleme listesi formunda
+  bağlantı istenirse bu adres verilebilir.
 
 ## 1. Bekleme listesi / ilgi formu
 
@@ -34,8 +37,9 @@ Form: <https://docs.google.com/forms/d/e/1FAIpQLSdvdQ0lgIq2369aemj1O6w8R8FwGn9O5
 - **State:** Playable. Single-player against 3 bots, full match scoring, EN + TR.
 - **Bundle size:** ~40 KiB total
 - **Developer / publisher:** ULGEN Core (onayla)
-- **Oynanabilir bağlantı istenirse:** şu an herkese açık bir bağlantı yok (GitHub reposu private). Seçenekler:
-  repoyu public yapıp GitHub Pages'te yayınlamak veya itch.io'ya yüklemek. İstersen bunu ben yaparım.
+- **Oynanabilir bağlantı istenirse:** <https://atabayhakan.github.io/okey-playable/> —
+  `main` dalına push olunca GitHub Actions otomatik yayınlıyor. Alternatif: itch.io'ya
+  yüklemek.
 
 ## 2. Kabul gelince: portal adımları
 
