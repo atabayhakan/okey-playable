@@ -11,7 +11,7 @@ export type Difficulty = 'easy' | 'normal' | 'hard';
  * matters: if the bots always take from the pile in front of them, the face
  * down pile never empties and the hand never ends.
  */
-const TAKE_BAR: Record<Difficulty, number> = { easy: 9, normal: 6, hard: 5 };
+const TAKE_BAR: Record<Difficulty, number> = { easy: 7, normal: 4, hard: 2 };
 
 /** Distance between two values of one color, counting the 12-13-1 wrap. */
 function distance(a: number, b: number): number {
@@ -49,15 +49,16 @@ export function botWantsDiscard(r: RoundState, seat: number, difficulty: Difficu
   if (resolve(offer, r.okey).wild) return true;
   if (difficulty !== 'easy' && findWinningDiscard([...hand, offer], r.okey)) return true;
   const worth = tileValue(offer, hand, r.okey);
-  // Taking a tile that finishes a meld is worth it, but only if the tile is
-  // worth having in the first place.
-  if (
-    difficulty === 'hard' &&
-    worth >= 4 &&
-    meldsInHand([...hand, offer], r.okey).length > meldsInHand(hand, r.okey).length
-  ) {
-    return true;
-  }
+  // Taking a tile the bot would throw straight back is a wasted turn: the
+  // hand comes out the same and the middle pile never gets drawn from. Draw
+  // instead, or the hand never ends.
+  if (chooseDiscard([...hand, offer], r.okey).id === offer.id) return false;
+
+  // Taking only pays when the tile really joins the hand: it completes a meld,
+  // or it is clearly better than a random tile from the middle.
+  const before = meldsInHand(hand, r.okey).length;
+  const after = meldsInHand([...hand, offer], r.okey).length;
+  if (after > before) return true;
   return worth >= TAKE_BAR[difficulty];
 }
 
@@ -77,26 +78,30 @@ function bestFinish(hand: readonly Tile[], okey: Face): Tile | null {
   return best;
 }
 
-export function botPlanDiscard(r: RoundState, seat: number, difficulty: Difficulty = 'normal'): { tileId: number; win: boolean } {
+export function botPlanDiscard(r: RoundState, seat: number, _difficulty: Difficulty = 'normal'): { tileId: number; win: boolean } {
   const hand = r.hands[seat];
   const winning = bestFinish(hand, r.okey);
   if (winning) return { tileId: winning.id, win: true };
 
-  // Throw the tile that costs the hand the least: the one that is worth least
-  // on its own and breaks the fewest finished melds. An easy bot does not
-  // bother protecting them.
-  const meldCount = meldsInHand(hand, r.okey).length;
-  const care = difficulty === 'easy' ? 0 : 6;
+  return { tileId: chooseDiscard(hand, r.okey).id, win: false };
+}
+
+/**
+ * The tile the bot throws: the one that costs the hand the least, meaning it
+ * is worth little on its own and breaks the fewest finished melds.
+ */
+function chooseDiscard(hand: readonly Tile[], okey: Face): Tile {
+  const meldCount = meldsInHand(hand, okey).length;
   let worst = hand[0];
   let worstScore = Infinity;
   for (const tile of hand) {
     const rest = hand.filter((t) => t !== tile);
-    const broken = meldCount - meldsInHand(rest, r.okey).length;
-    const score = tileValue(tile, hand, r.okey) - broken * care;
+    const broken = meldCount - meldsInHand(rest, okey).length;
+    const score = tileValue(tile, hand, okey) - broken * 6;
     if (score < worstScore) {
       worst = tile;
       worstScore = score;
     }
   }
-  return { tileId: worst.id, win: false };
+  return worst;
 }

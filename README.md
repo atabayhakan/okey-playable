@@ -37,7 +37,14 @@ Değerler `src/core/scoring.ts` içinde. YouTube'a gönderilen skor kazanılan e
 | Maç uzunluğu: kısa / klasik / uzun | 10 / 20 / 40 puanla başlar, sonraki maçtan itibaren |
 | Renkli okey | Gösterge kırmızı ya da siyahsa okey iki kat sayılır: okey atarak bitiş 8 (çiftten 16) puan |
 | Tek renk bitiş | Elin tüm taşları tek renkte bitirilirse diğerleri iki kat öder (4 / 8 / 16) |
-| Rakip zorluğu: kolay / normal / zor | Botlar ne kadar agresif taş alır, elini ne kadar korur |
+| Rakip zorluğu: kolay / normal / zor | Rakiplerin temposu ve açgözlülüğü: kolayda yavaş ve pasif, zorda hızlı ve atış yığınından her şeyi kapar |
+
+**Rakip zorluğu ölçüldü.** 300 el üzerinde simülasyon: rakiplerin oyun
+kalitesi sonucu belirgin değiştirmiyor (dağıtım belirliyor), bu yüzden seviyeler
+oyuncunun **hissedeceği** farkı üretiyor: botların düşünme süresi (kolayda
+900/1100 ms, normelde 320/420 ms, zorda 180/240 ms) ve atış yığınından taş
+alma açgözlülüğü (kolay 7, normal 4, zor 2). Ölçüm aracı `tests/` altında değil,
+`git log` ile bakılabilir; kalıcı olan kısımları testler.
 
 Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume()`,
 `okeyDev.setAudio(false)`, `okeyDev.clearSave()` ile YouTube olaylarını taklit edebilirsin.
@@ -47,8 +54,7 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 
 | Klasör | İçerik |
 |---|---|
-| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), eldeki per/seri bulma, tur akışı, gösterge, puanlama, botlar |
-| `src/app/` | Kontrolcü (tur sırası, botlar, maç puanı, kayıt + sürüm geçişi), ıstaka düzeni, duraklatılabilir zamanlayıcı, ses |
+| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), eldeki per/seri bulma, tur akışı, gösterge, puanlama, botlar || `src/app/` | Kontrolcü (tur sırası, botlar, maç puanı, kayıt + sürüm geçişi), ıstaka düzeni, duraklatılabilir zamanlayıcı, ses |
 | `src/platform/` | `ytgame` SDK sarmalayıcısı ve tipleri; Playables dışında yerel yedek |
 | `src/ui/` | Masa görünümü, sürükle-bırak, stiller |
 | `tests/` | Vitest testleri |
@@ -115,6 +121,7 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 - [x] Daha güçlü botlar (eli bozan taşı atmamak, per tamamlayan taşı almak)
 - [x] Kısa öğretici (kurallar kartı) ve ipucu
 - [x] Animasyonlar (taş dağıtma, atma) ve ayrık sesler
+- [x] Sonsuz el hatası: botlar attıkları taşı geri aldığı için deste hiç boşalmıyordu
 - [x] İsteğe bağlı kurallar: maç uzunluğu, renkli okey, tek renk bitiş, bot zorluğu
 - [x] Ödüllü reklam: ipucunun ikinci kullanımı (`requestRewardedAd`)
 - [ ] Erken erişime kabul edilince resmî test paketi ile doğrulama

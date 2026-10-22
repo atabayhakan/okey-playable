@@ -5,6 +5,13 @@ import { okeyFaceFor, type Face, type NumberTile, type Tile } from './tile';
 
 export const SEATS = 4;
 
+/**
+ * The most turns a hand may take. A normal hand runs about a hundred turns;
+ * this only catches the case where the tiles keep circulating and nobody
+ * draws from the middle.
+ */
+export const MAX_HAND_TURNS = 400;
+
 export type Phase = 'draw' | 'discard' | 'roundOver';
 
 /** Plain data so it can go straight into the cloud save. */
@@ -112,7 +119,10 @@ export function discardTile(r: RoundState, seat: number, tileId: number): Tile {
   const tile = removeFromHand(r, seat, tileId);
   r.discards[seat].push(tile);
   r.turnsTaken[seat]++;
-  if (r.pile.length === 0) {
+  // The hand ends when the middle pile is empty. Should the tiles keep
+  // circulating instead, the hand is called anyway: a hand that never ends is
+  // worse than one that ends early.
+  if (r.pile.length === 0 || r.turnsTaken.reduce((n, t) => n + t, 0) > MAX_HAND_TURNS) {
     r.phase = 'roundOver';
   } else {
     r.turn = nextSeat(seat);

@@ -24,8 +24,15 @@ import type { Sound } from './sound';
 
 export const HUMAN = 0;
 
-const BOT_DRAW_DELAY_MS = 600;
-const BOT_DISCARD_DELAY_MS = 750;
+/**
+ * How long the opponents think before they move. An easy game gives the
+ * player time to think, a hard one keeps the pressure on.
+ */
+const BOT_DELAY: Record<Difficulty, { draw: number; discard: number }> = {
+  easy: { draw: 900, discard: 1100 },
+  normal: { draw: 320, discard: 420 },
+  hard: { draw: 180, discard: 240 },
+};
 const NOTICE_MS = 2200;
 /** How long the dealt tiles take to land on the rack. */
 const DEAL_ANIM_MS = 900;
@@ -422,7 +429,7 @@ export class Controller {
   private scheduleBot(): void {
     const r = this.round;
     if (this.cancelBot || r.phase === 'roundOver' || r.turn === HUMAN) return;
-    const delay = r.phase === 'draw' ? BOT_DRAW_DELAY_MS : BOT_DISCARD_DELAY_MS;
+    const delay = r.phase === 'draw' ? BOT_DELAY[this.difficulty].draw : BOT_DELAY[this.difficulty].discard;
     this.cancelBot = this.deps.scheduler.after(delay, () => {
       this.cancelBot = null;
       this.botStep();
