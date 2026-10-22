@@ -3,7 +3,7 @@ import type { Difficulty } from '../core/bot';
 import { GROUP_BREAK } from '../app/rack';
 import { canDraw, canShowIndicator, canTakeDiscard, previousSeat, SEATS } from '../core/game';
 import { winningGroups } from '../core/hand';
-import { finishedWithOkey, matchLeaders, START_POINTS } from '../core/scoring';
+import { finishedWithOkey, isSingleColorHand, matchLeaders, START_POINTS } from '../core/scoring';
 import { resolve, type Color, type Tile } from '../core/tile';
 import type { Strings } from '../i18n';
 
@@ -496,6 +496,22 @@ export class View {
               this.game.coloredOkey ? t.on : t.off,
             ),
           ),
+          // A hand finished with all its tiles in one colour.
+          h(
+            'div',
+            { class: 'difficulty' },
+            h('span', { class: 'label' }, t.singleColorLabel),
+            h(
+              'button',
+              {
+                class: `chip${this.game.singleColor ? ' on' : ''}`,
+                'data-action': 'single-color',
+                'data-key': 'single-color',
+                'aria-pressed': String(this.game.singleColor),
+              },
+              this.game.singleColor ? t.on : t.off,
+            ),
+          ),
         ),
         h('button', { class: 'primary', 'data-action': 'close-coach', 'data-key': 'close-coach' }, t.coachStart),
       ),
@@ -523,6 +539,8 @@ export class View {
           matchOver && h('p', { class: 'match-over' }, matchTitle),
           h('h2', { id: 'result-title' }, title),
           detail && h('p', { class: 'detail' }, detail),
+          // A hand finished in one colour is worth double, so it is worth saying.
+          isSingleColorHand(r) && h('p', { class: 'single-color' }, t.singleColorDone),
           r.winner !== null && h('div', { class: 'hand' }, ...this.winningHand(r.winner)),
           this.scoreTable(matchOver ? leaders : []),
           h('p', { class: 'rule' }, t.matchRule(START_POINTS)),
@@ -639,6 +657,9 @@ export class View {
         break;
       case 'colored-okey':
         g.setColoredOkey(!g.coloredOkey);
+        break;
+      case 'single-color':
+        g.setSingleColor(!g.singleColor);
         break;
       case 'next-hand':
         void g.nextHand();

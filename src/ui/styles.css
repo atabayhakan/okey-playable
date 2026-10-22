@@ -935,6 +935,18 @@ button.tile {
   font-size: 14px;
 }
 
+/* Tek renk bitiş: kazanma vurgusu. */
+.modal .single-color {
+  margin: 8px auto 0;
+  padding: 6px 14px;
+  display: inline-block;
+  border-radius: 999px;
+  background: #1f6f4a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .modal .rule,
 .modal .lifetime {
   font-size: 13px;

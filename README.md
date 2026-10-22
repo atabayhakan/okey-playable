@@ -36,6 +36,7 @@ Değerler `src/core/scoring.ts` içinde. YouTube'a gönderilen skor kazanılan e
 |---|---|
 | Maç uzunluğu: kısa / klasik / uzun | 10 / 20 / 40 puanla başlar, sonraki maçtan itibaren |
 | Renkli okey | Gösterge kırmızı ya da siyahsa okey iki kat sayılır: okey atarak bitiş 8 (çiftten 16) puan |
+| Tek renk bitiş | Elin tüm taşları tek renkte bitirilirse diğerleri iki kat öder (4 / 8 / 16) |
 | Rakip zorluğu: kolay / normal / zor | Botlar ne kadar agresif taş alır, elini ne kadar korur |
 
 Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume()`,
@@ -114,8 +115,7 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 - [x] Daha güçlü botlar (eli bozan taşı atmamak, per tamamlayan taşı almak)
 - [x] Kısa öğretici (kurallar kartı) ve ipucu
 - [x] Animasyonlar (taş dağıtma, atma) ve ayrık sesler
-- [x] İsteğe bağlı kurallar: maç uzunluğu, renkli okey, bot zorluğu
-- [ ] Tek renk bitiş kuralı (çözücü ayrı bir sürüm ister)
+- [x] İsteğe bağlı kurallar: maç uzunluğu, renkli okey, tek renk bitiş, bot zorluğu
 - [x] Ödüllü reklam: ipucunun ikinci kullanımı (`requestRewardedAd`)
 - [ ] Erken erişime kabul edilince resmî test paketi ile doğrulama
 - [ ] Mağaza görselleri (başlıkta/küçük resimde logo olmamalı)

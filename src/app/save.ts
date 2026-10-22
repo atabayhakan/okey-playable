@@ -12,8 +12,9 @@ import type { Rack } from './rack';
  * v2: + match points, match stats, round.turnsTaken / round.indicatorShownBy
  * v3: + coachSeen, so the rules card is only shown once
  * v4: + difficulty, the strength of the computer opponents
+ * v5: + matchStart, coloredOkey, singleColor, the optional rules
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export interface Stats {
   /** Hands played and won; `won` is the score sent to YouTube. */
@@ -38,6 +39,8 @@ export interface SaveData {
   matchStart: number;
   /** The colored okey: a red or black indicator makes the okey count double. */
   coloredOkey: boolean;
+  /** A hand finished with all its tiles in one colour costs the others double. */
+  singleColor: boolean;
 }
 
 export const emptySave = (): SaveData => ({
@@ -50,6 +53,7 @@ export const emptySave = (): SaveData => ({
   difficulty: 'normal',
   matchStart: START_POINTS,
   coloredOkey: false,
+  singleColor: false,
 });
 
 export const serializeSave = (save: SaveData): string => JSON.stringify(save);
@@ -71,6 +75,7 @@ function upgrade(data: unknown): SaveData {
   if (d.v === 1) d = v1ToV2(d);
   if (d.v === 2) d = v2ToV3(d);
   if (d.v === 3) d = v3ToV4(d);
+  if (d.v === 4) d = v4ToV5(d);
 
   const save = emptySave();
   const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
@@ -82,6 +87,7 @@ function upgrade(data: unknown): SaveData {
   save.difficulty = isDifficulty(d.difficulty) ? d.difficulty : 'normal';
   save.matchStart = typeof d.matchStart === 'number' && d.matchStart > 0 ? d.matchStart : START_POINTS;
   save.coloredOkey = d.coloredOkey === true;
+  save.singleColor = d.singleColor === true;
   if (d.v !== SAVE_VERSION) return save;
 
   if (looksLikeMatch(d.match)) {
@@ -115,6 +121,11 @@ function v2ToV3(d: Raw): Raw {
 /** v3 had no difficulty setting. */
 function v3ToV4(d: Raw): Raw {
   return { ...d, v: 4, difficulty: 'normal' };
+}
+
+/** v4 had no optional rules beyond the difficulty. */
+function v4ToV5(d: Raw): Raw {
+  return { ...d, v: 5, matchStart: START_POINTS, coloredOkey: false, singleColor: false };
 }
 
 const isDifficulty = (x: unknown): x is Difficulty => x === 'easy' || x === 'normal' || x === 'hard';

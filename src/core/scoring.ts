@@ -1,5 +1,5 @@
 import { SEATS, type RoundState } from './game';
-import type { WinKind } from './hand';
+import { isSingleColorFinish, type WinKind } from './hand';
 import { resolve, type Face, type Tile } from './tile';
 
 /**
@@ -31,6 +31,10 @@ export interface MatchState {
 
 export const newMatch = (start: number = START_POINTS): MatchState => ({ points: new Array<number>(SEATS).fill(start), hands: 0, start });
 
+/** Whether the winner finished with every tile in one colour. */
+export const isSingleColorHand = (r: RoundState): boolean =>
+  r.winner !== null && isSingleColorFinish(r.hands[r.winner], r.okey);
+
 /** The colored okey: a red or black indicator makes the okey count double. */
 export const isColoredOkey = (r: RoundState): boolean => r.indicator.color === 'red' || r.indicator.color === 'black';
 
@@ -38,31 +42,50 @@ export function finishedWithOkey(r: RoundState): boolean {
   return r.finishTile !== null && resolve(r.finishTile, r.okey).wild;
 }
 
+/** The optional rules that change what a finished hand is worth. */
+export interface RuleOptions {
+  /** The colored okey: a red or black indicator makes the okey count double. */
+  coloredOkey: boolean;
+  /** A hand finished with all its tiles in one colour costs the others double. */
+  singleColor: boolean;
+}
+
+export const NO_EXTRA_RULES: RuleOptions = { coloredOkey: false, singleColor: false };
+
 /** What each other player loses when a hand is finished this way. */
-export function finishPenalty(kind: WinKind, okeyDiscard: boolean, coloredOkey = false): number {
+export function finishPenalty(kind: WinKind, okeyDiscard: boolean, rules: RuleOptions = NO_EXTRA_RULES): number {
+  const base =
+    kind === 'pairs'
+      ? okeyDiscard
+        ? PENALTY.pairsOkeyFinish
+        : PENALTY.pairs
+      : okeyDiscard
+        ? PENALTY.okeyFinish
+        : PENALTY.win;
   // The colored okey only doubles the okey finish; a normal finish is the same.
-  if (kind === 'pairs') {
-    return okeyDiscard ? (coloredOkey ? PENALTY.pairsOkeyFinish * 2 : PENALTY.pairsOkeyFinish) : PENALTY.pairs;
-  }
-  return okeyDiscard ? (coloredOkey ? PENALTY.okeyFinish * 2 : PENALTY.okeyFinish) : PENALTY.win;
+  let penalty = okeyDiscard && rules.coloredOkey ? base * 2 : base;
+  if (rules.singleColor) penalty *= 2;
+  return penalty;
 }
 
 /** Points each seat loses for a finished round (0 for the winner). */
-export function roundPenalties(r: RoundState, coloredOkey = false): number[] {
+export function roundPenalties(r: RoundState, rules: RuleOptions = NO_EXTRA_RULES): number[] {
   const lost = new Array<number>(SEATS).fill(0);
   const charge = (amount: number, except: number) => {
     for (let seat = 0; seat < SEATS; seat++) if (seat !== except) lost[seat] += amount;
   };
   if (r.indicatorShownBy !== null) charge(PENALTY.indicator, r.indicatorShownBy);
   if (r.winner !== null && r.winKind !== null) {
-    charge(finishPenalty(r.winKind, finishedWithOkey(r), coloredOkey), r.winner);
+    // The single colour rule only applies when the winner really finished in one colour.
+    const applied: RuleOptions = { ...rules, singleColor: rules.singleColor && isSingleColorHand(r) };
+    charge(finishPenalty(r.winKind, finishedWithOkey(r), applied), r.winner);
   }
   return lost;
 }
 
 /** Applies a finished round to the match and returns what each seat lost. */
-export function scoreRound(match: MatchState, r: RoundState, coloredOkey = false): number[] {
-  const lost = roundPenalties(r, coloredOkey);
+export function scoreRound(match: MatchState, r: RoundState, rules: RuleOptions = NO_EXTRA_RULES): number[] {
+  const lost = roundPenalties(r, rules);
   match.points = match.points.map((p, seat) => p - lost[seat]);
   match.hands++;
   return lost;

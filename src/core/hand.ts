@@ -39,6 +39,22 @@ export function winningKind(tiles: readonly Tile[], okey: Face): WinKind | null 
   return null;
 }
 
+/**
+ * The hand is finished with all its tiles in one colour. A set always needs
+ * three or four colours, so such a hand can only be melded as runs of that
+ * colour, with the wild standing in for the missing tiles.
+ */
+export function isSingleColorFinish(tiles: readonly Tile[], okey: Face): boolean {
+  let color: Color | null = null;
+  for (const tile of tiles) {
+    const r = resolve(tile, okey);
+    if (r.wild) continue;
+    if (color === null) color = r.color;
+    else if (color !== r.color) return false;
+  }
+  return color !== null;
+}
+
 export const isWinningHand = (tiles: readonly Tile[], okey: Face): boolean => winningKind(tiles, okey) !== null;
 
 /**

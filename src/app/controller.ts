@@ -14,7 +14,7 @@ import {
   type RoundState,
 } from '../core/game';
 import { randomSeed } from '../core/rng';
-import { isMatchOver, matchLeaders, newMatch, scoreRound, handValue, START_POINTS, type MatchState } from '../core/scoring';
+import { isMatchOver, matchLeaders, newMatch, scoreRound, handValue, START_POINTS, type MatchState, type RuleOptions } from '../core/scoring';
 import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
 import { arrangeMelds, arrangePairs, arrangeRuns, compactRack, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
@@ -76,6 +76,8 @@ export class Controller {
   matchStart: number = START_POINTS;
   /** The colored okey: a red or black indicator makes the okey count double. */
   coloredOkey = false;
+  /** A hand finished with all its tiles in one colour costs the others double. */
+  singleColor = false;
 
   private readonly listeners = new Set<() => void>();
   private cancelBot: (() => void) | null = null;
@@ -101,6 +103,7 @@ export class Controller {
     this.difficulty = save.difficulty;
     this.matchStart = save.matchStart;
     this.coloredOkey = save.coloredOkey;
+    this.singleColor = save.singleColor;
     // A new player gets the rules card over their first hand.
     this.coachOpen = !save.coachSeen;
     if (save.round && save.round.phase !== 'roundOver') {
@@ -278,9 +281,21 @@ export class Controller {
     this.changed();
   }
 
+  /** The optional rules that change what a finished hand is worth. */
+  get rules(): RuleOptions {
+    return { coloredOkey: this.coloredOkey, singleColor: this.singleColor };
+  }
+
   /** The colored okey: a red or black indicator makes the okey count double. */
   setColoredOkey(on: boolean): void {
     this.coloredOkey = on;
+    void this.persist();
+    this.changed();
+  }
+
+  /** A hand finished with all its tiles in one colour costs the others double. */
+  setSingleColor(on: boolean): void {
+    this.singleColor = on;
     void this.persist();
     this.changed();
   }
@@ -340,6 +355,7 @@ export class Controller {
       difficulty: this.difficulty,
       matchStart: this.matchStart,
       coloredOkey: this.coloredOkey,
+      singleColor: this.singleColor,
     };
     try {
       await this.deps.platform.saveData(serializeSave(save));
@@ -388,7 +404,7 @@ export class Controller {
   }
 
   private finishRound(): void {
-    this.lastPenalties = scoreRound(this.match, this.round, this.coloredOkey);
+    this.lastPenalties = scoreRound(this.match, this.round, this.rules);
     this.stats.played++;
     if (this.round.winner === HUMAN) {
       this.stats.won++;

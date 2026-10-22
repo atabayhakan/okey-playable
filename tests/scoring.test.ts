@@ -10,8 +10,9 @@ import {
   takeDiscard,
   type RoundState,
 } from '../src/core/game';
-import { finishPenalty, isColoredOkey, isMatchOver, matchLeaders, newMatch, PENALTY, roundPenalties, scoreRound, START_POINTS } from '../src/core/scoring';
-import type { Tile } from '../src/core/tile';
+import { finishPenalty, isColoredOkey, isMatchOver, isSingleColorHand, matchLeaders, newMatch, PENALTY, roundPenalties, scoreRound, START_POINTS } from '../src/core/scoring';
+import { isSingleColorFinish } from '../src/core/hand';
+import type { Color, Face, Tile } from '../src/core/tile';
 
 /** A round that ended with `winner` finishing by throwing `finish`. */
 function finished(winner: number | null, kind: 'sets' | 'pairs' | null, finish: 'okey' | 'plain' | null, shownBy: number | null = null): RoundState {
@@ -176,10 +177,49 @@ it('penalty table matches the classic rules', () => {
 it('the colored okey doubles the okey finish', () => {
   expect(finishPenalty('sets', false)).toBe(2);
   expect(finishPenalty('sets', true)).toBe(4);
-  expect(finishPenalty('sets', true, true)).toBe(8);
-  expect(finishPenalty('pairs', true, true)).toBe(16);
+  expect(finishPenalty('sets', true, { coloredOkey: true, singleColor: false })).toBe(8);
+  expect(finishPenalty('pairs', true, { coloredOkey: true, singleColor: false })).toBe(16);
   // A normal finish is not affected by the color.
-  expect(finishPenalty('sets', false, true)).toBe(2);
+  expect(finishPenalty('sets', false, { coloredOkey: true, singleColor: false })).toBe(2);
+});
+
+it('a single colour finish doubles what the others lose', () => {
+  const rules = { coloredOkey: false, singleColor: true };
+  expect(finishPenalty('sets', false, rules)).toBe(4);
+  expect(finishPenalty('sets', true, rules)).toBe(8);
+  expect(finishPenalty('pairs', true, rules)).toBe(16);
+});
+
+it('knows a hand finished in one colour', () => {
+  const okey: Face = { color: 'red', value: 5 };
+  const n = (color: Color, value: number): Tile => ({ id: 900 + value, kind: 'number', color, value });
+  expect(isSingleColorFinish([n('red', 1), n('red', 2), n('black', 3)], okey)).toBe(false);
+  expect(isSingleColorFinish([n('red', 1), n('red', 2), n('red', 3)], okey)).toBe(true);
+  // The wild does not break the single colour.
+  expect(isSingleColorFinish([n('red', 1), n('red', 2), { id: 999, kind: 'number', color: 'red', value: 5 }], okey)).toBe(true);
+});
+
+it('doubles what the others lose when the winner finished in one colour', () => {
+  const r = finished(0, 'sets', 'plain');
+  // The winner's fourteen tiles are all blue.
+  r.hands[0] = Array.from({ length: 14 }, (_, i) => ({ id: 500 + i, kind: 'number', color: 'blue', value: (i % 13) + 1 })) as Tile[];
+  expect(isSingleColorHand(r)).toBe(true);
+
+  const plain = roundPenalties(r, { coloredOkey: false, singleColor: false });
+  const single = roundPenalties(r, { coloredOkey: false, singleColor: true });
+  expect(plain[1]).toBe(2);
+  expect(single[1]).toBe(4);
+  expect(single[0]).toBe(0);
+});
+
+it('does not double when the winner mixed the colours', () => {
+  const r = finished(0, 'sets', 'plain');
+  r.hands[0] = [
+    { id: 501, kind: 'number', color: 'blue', value: 1 },
+    { id: 502, kind: 'number', color: 'black', value: 2 },
+  ] as Tile[];
+  expect(isSingleColorHand(r)).toBe(false);
+  expect(roundPenalties(r, { coloredOkey: false, singleColor: true })[1]).toBe(2);
 });
 
 it('a match starts from the chosen points', () => {

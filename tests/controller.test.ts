@@ -111,8 +111,13 @@ describe('controller', () => {
     const game = makeController();
     game.setMatchStart(40);
     game.setColoredOkey(true);
-    const restored = makeController(parseSave(serializeSave({ ...emptySave(), matchStart: 40, coloredOkey: true })));
+    game.setSingleColor(true);
+    expect(game.rules).toEqual({ coloredOkey: true, singleColor: true });
+    const restored = makeController(
+      parseSave(serializeSave({ ...emptySave(), matchStart: 40, coloredOkey: true, singleColor: true })),
+    );
     expect(restored.matchStart).toBe(40);
     expect(restored.coloredOkey).toBe(true);
+    expect(restored.singleColor).toBe(true);
   });
 });
