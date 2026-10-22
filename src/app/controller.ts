@@ -1,4 +1,5 @@
-import { botPlanDiscard, botWantsDiscard } from '../core/bot';
+import { botPlanDiscard, botWantsDiscard, type Difficulty } from '../core/bot';
+import { meldsInHand } from '../core/hand';
 import {
   canDraw,
   canShowIndicator,
@@ -13,10 +14,10 @@ import {
   type RoundState,
 } from '../core/game';
 import { randomSeed } from '../core/rng';
-import { isMatchOver, matchLeaders, newMatch, scoreRound, type MatchState } from '../core/scoring';
+import { isMatchOver, matchLeaders, newMatch, scoreRound, handValue, START_POINTS, type MatchState } from '../core/scoring';
 import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
-import { arrangePairs, arrangeRuns, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
+import { arrangeMelds, arrangePairs, arrangeRuns, compactRack, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
 import { SAVE_VERSION, serializeSave, type SaveData, type Stats } from './save';
 import type { Scheduler } from './scheduler';
 import type { Sound } from './sound';
@@ -26,10 +27,14 @@ export const HUMAN = 0;
 const BOT_DRAW_DELAY_MS = 600;
 const BOT_DISCARD_DELAY_MS = 750;
 const NOTICE_MS = 2200;
+/** How long the dealt tiles take to land on the rack. */
+const DEAL_ANIM_MS = 900;
+/** How long a thrown tile takes to settle on the pile. */
+const DISCARD_ANIM_MS = 260;
 /** Interstitial ads only at a natural break: before every Nth new hand. */
 const HANDS_PER_INTERSTITIAL = 2;
 
-export type Notice = { kind: 'invalidFinish' } | { kind: 'indicatorShown'; seat: number };
+export type Notice = { kind: 'invalidFinish' } | { kind: 'indicatorShown'; seat: number } | { kind: 'noAd' };
 
 interface Deps {
   platform: Platform;
@@ -39,7 +44,9 @@ interface Deps {
 
 function freshRound(starter: number): { round: RoundState; rack: Rack } {
   const round = dealRound(randomSeed(), starter);
-  return { round, rack: arrangeRuns(round.hands[HUMAN], round.okey) };
+  // The hand starts grouped by its complete sets and runs, then by colour: the
+  // player sees what they have from the first second.
+  return { round, rack: arrangeMelds(round.hands[HUMAN], round.okey) };
 }
 
 /** Owns the game state, runs the bots, keeps score and saves progress. The view only reads and calls in. */
@@ -53,6 +60,22 @@ export class Controller {
   selected: number | null = null;
   lastDrawn: number | null = null;
   notice: Notice | null = null;
+  /** Set while the hand is being dealt out, so the tiles can animate in. */
+  dealing = false;
+  /** Tile that was just thrown, so the discard can animate. */
+  discardingId: number | null = null;
+  /** The one-time rules card is open. */
+  coachOpen = false;
+  /** The tile the hint points at, if the hint is showing. */
+  hintTileId: number | null = null;
+  /** The free hint of this hand is spent; the next one costs a rewarded ad. */
+  private hintUsedThisHand = false;
+  /** How sharp the computer opponents are. */
+  difficulty: Difficulty = 'normal';
+  /** The points a new match starts from. */
+  matchStart: number = START_POINTS;
+  /** The colored okey: a red or black indicator makes the okey count double. */
+  coloredOkey = false;
 
   private readonly listeners = new Set<() => void>();
   private cancelBot: (() => void) | null = null;
@@ -61,6 +84,10 @@ export class Controller {
   private handsSinceAd = 0;
   /** A hand dealt at startup is not in the save yet. */
   private dealtOnLoad = false;
+  /** The rules card has been closed for good. */
+  private coachSeen: boolean;
+  /** Complete sets and runs the player had a moment ago, to spot a new one. */
+  private lastMeldCount = 0;
 
   /** `canSave` is false when loading failed: saving then would wipe the player's progress. */
   constructor(
@@ -70,15 +97,23 @@ export class Controller {
   ) {
     this.stats = { ...save.stats };
     this.match = { points: [...save.match.points], hands: save.match.hands };
+    this.coachSeen = save.coachSeen;
+    this.difficulty = save.difficulty;
+    this.matchStart = save.matchStart;
+    this.coloredOkey = save.coloredOkey;
+    // A new player gets the rules card over their first hand.
+    this.coachOpen = !save.coachSeen;
     if (save.round && save.round.phase !== 'roundOver') {
       this.round = save.round;
       this.rack = reconcileRack(save.rack ?? [], save.round.hands[HUMAN]);
     } else {
       // The player left on the result screen: that hand is already scored, so move on.
-      if (isMatchOver(this.match)) this.match = newMatch();
+      if (isMatchOver(this.match)) this.match = newMatch(this.matchStart);
       ({ round: this.round, rack: this.rack } = freshRound(save.round ? nextSeat(save.round.starter) : HUMAN));
       this.dealtOnLoad = true;
     }
+    // Counted from here on: the hand may already hold a complete set.
+    this.lastMeldCount = this.melds.length;
   }
 
   subscribe(listener: () => void): () => void {
@@ -101,6 +136,58 @@ export class Controller {
     return isMatchOver(this.match);
   }
 
+  /** The seed the current hand was dealt from: the deal can be replayed. */
+  get seed(): number {
+    return this.round.seed;
+  }
+
+  /** What the player's hand is worth right now. */
+  get handValue(): number {
+    return handValue(this.round.hands[HUMAN], this.round.okey);
+  }
+
+  /** The complete sets and runs the player already holds. */
+  get melds(): Tile[][] {
+    return meldsInHand(this.round.hands[HUMAN], this.round.okey);
+  }
+
+  /**
+   * Points at the tile the player should throw: the one that costs the hand
+   * the least. If the hand is one tile from winning, that tile is the answer.
+   *
+   * The first hint of a hand is free. After that the player watches a rewarded
+   * ad for another one: the game never blocks, it only asks for the reward.
+   */
+  async requestHint(): Promise<void> {
+    if (this.round.turn !== HUMAN || this.round.phase !== 'discard') return;
+    if (this.hintTileId !== null) return;
+    if (this.hintUsedThisHand) {
+      const granted = await this.deps.platform.requestRewardedAd('hint').catch(() => false);
+      if (!granted) {
+        this.showNotice({ kind: 'noAd' });
+        return;
+      }
+    }
+    this.hintUsedThisHand = true;
+    this.hintTileId = botPlanDiscard(this.round, HUMAN, this.difficulty).tileId;
+    this.changed();
+  }
+
+  /** The hint has been used up for this hand. */
+  get hintAvailable(): boolean {
+    return this.round.turn === HUMAN && this.round.phase === 'discard' && this.hintTileId === null;
+  }
+
+  /** True when the next hint costs a rewarded ad. */
+  get hintCostsAd(): boolean {
+    return this.hintUsedThisHand;
+  }
+
+  /** The tile ids that belong to a complete meld. */
+  get meldedTileIds(): Set<number> {
+    return new Set(this.melds.flat().map((tile) => tile.id));
+  }
+
   humanDraw(): void {
     if (canDraw(this.round, HUMAN)) this.receive(drawFromPile(this.round, HUMAN));
   }
@@ -113,6 +200,7 @@ export class Controller {
     if (!canShowIndicator(this.round, HUMAN)) return;
     showIndicator(this.round, HUMAN);
     this.showNotice({ kind: 'indicatorShown', seat: HUMAN });
+    this.deps.sound.show();
     void this.persist();
   }
 
@@ -157,6 +245,54 @@ export class Controller {
     this.changed();
   }
 
+  /** Lays the hand out with the complete sets and runs first. */
+  sortMelds(): void {
+    this.rack = arrangeMelds(this.round.hands[HUMAN], this.round.okey);
+    this.changed();
+  }
+
+  /** Puts the tiles back in hand order, without the group gaps. */
+  clearArrange(): void {
+    const hand = this.round.hands[HUMAN];
+    this.rack = hand.map((tile) => tile.id);
+    this.changed();
+  }
+
+  /** Opens the rules card; it can be reopened from the toolbar at any time. */
+  openCoach(): void {
+    this.coachOpen = true;
+    this.changed();
+  }
+
+  /** How sharp the computer opponents are. */
+  setDifficulty(difficulty: Difficulty): void {
+    this.difficulty = difficulty;
+    void this.persist();
+    this.changed();
+  }
+
+  /** The points a new match starts from. It applies to the next match. */
+  setMatchStart(start: number): void {
+    this.matchStart = start;
+    void this.persist();
+    this.changed();
+  }
+
+  /** The colored okey: a red or black indicator makes the okey count double. */
+  setColoredOkey(on: boolean): void {
+    this.coloredOkey = on;
+    void this.persist();
+    this.changed();
+  }
+
+  /** Closes the rules card for good. */
+  closeCoach(): void {
+    this.coachOpen = false;
+    this.coachSeen = true;
+    void this.persist();
+    this.changed();
+  }
+
   /** From the result screen: the next hand, or a new match once someone has hit zero. */
   async nextHand(): Promise<void> {
     if (this.round.phase !== 'roundOver' || this.advancing) return;
@@ -169,15 +305,24 @@ export class Controller {
       }
       this.cancelBot?.();
       this.cancelBot = null;
-      if (this.matchOver) this.match = newMatch();
+      if (this.matchOver) this.match = newMatch(this.matchStart);
       ({ round: this.round, rack: this.rack } = freshRound(nextSeat(this.round.starter)));
       this.lastPenalties = null;
       this.selected = null;
       this.lastDrawn = null;
+      this.hintTileId = null;
+      // A new hand brings a new free hint.
+      this.hintUsedThisHand = false;
+      this.dealing = true;
       this.clearNotice();
       void this.persist();
       this.changed();
       this.scheduleBot();
+      // The deal is over in a moment; the tiles then sit still.
+      this.deps.scheduler.after(DEAL_ANIM_MS, () => {
+        this.dealing = false;
+        this.changed();
+      });
     } finally {
       this.advancing = false;
     }
@@ -185,7 +330,17 @@ export class Controller {
 
   async persist(): Promise<void> {
     if (!this.canSave) return;
-    const save: SaveData = { v: SAVE_VERSION, stats: this.stats, match: this.match, round: this.round, rack: this.rack };
+    const save: SaveData = {
+      v: SAVE_VERSION,
+      stats: this.stats,
+      match: this.match,
+      round: this.round,
+      rack: this.rack,
+      coachSeen: this.coachSeen,
+      difficulty: this.difficulty,
+      matchStart: this.matchStart,
+      coloredOkey: this.coloredOkey,
+    };
     try {
       await this.deps.platform.saveData(serializeSave(save));
     } catch {
@@ -196,29 +351,49 @@ export class Controller {
   private receive(tile: Tile): void {
     placeTile(this.rack, tile.id);
     this.lastDrawn = tile.id;
+    // A new tile means a new decision: the old hint is stale.
+    this.hintTileId = null;
     this.deps.sound.tile();
     this.changed();
   }
 
   private release(tileId: number): void {
     removeTile(this.rack, tileId);
+    // Close the hole the thrown tile leaves, so the rack stays one row of tiles.
+    compactRack(this.rack);
     if (this.selected === tileId) this.selected = null;
+    if (this.hintTileId === tileId) this.hintTileId = null;
     this.lastDrawn = null;
     this.clearNotice();
-    this.deps.sound.tile();
+    this.deps.sound.throwTile();
+    // The thrown tile is now on the pile: let it land with a little weight.
+    this.discardingId = tileId;
+    this.deps.scheduler.after(DISCARD_ANIM_MS, () => {
+      if (this.discardingId === tileId) {
+        this.discardingId = null;
+        this.changed();
+      }
+    });
   }
 
   private afterTurn(): void {
     if (this.round.phase === 'roundOver') this.finishRound();
-    else if (this.round.turn === HUMAN) void this.persist();
+    else if (this.round.turn === HUMAN) {
+      void this.persist();
+      // Sıra oyuncuda: kısa bir uyarı, oyuncu bakmadığında fark etsin.
+      this.deps.sound.turn();
+    }
     this.changed();
     this.scheduleBot();
   }
 
   private finishRound(): void {
-    this.lastPenalties = scoreRound(this.match, this.round);
+    this.lastPenalties = scoreRound(this.match, this.round, this.coloredOkey);
     this.stats.played++;
-    if (this.round.winner === HUMAN) this.stats.won++;
+    if (this.round.winner === HUMAN) {
+      this.stats.won++;
+      this.deps.sound.win();
+    }
     if (this.matchOver) {
       this.stats.matchesPlayed++;
       if (matchLeaders(this.match).includes(HUMAN)) this.stats.matchesWon++;
@@ -245,17 +420,19 @@ export class Controller {
     if (canShowIndicator(r, seat)) {
       showIndicator(r, seat);
       this.showNotice({ kind: 'indicatorShown', seat });
+      this.deps.sound.show();
     }
     if (r.phase === 'draw') {
-      if (botWantsDiscard(r, seat)) takeDiscard(r, seat);
+      if (botWantsDiscard(r, seat, this.difficulty)) takeDiscard(r, seat);
       else drawFromPile(r, seat);
+      this.deps.sound.tile();
       this.changed();
       this.scheduleBot();
       return;
     }
-    const plan = botPlanDiscard(r, seat);
+    const plan = botPlanDiscard(r, seat, this.difficulty);
     if (!(plan.win && declareWin(r, seat, plan.tileId))) discardTile(r, seat, plan.tileId);
-    this.deps.sound.tile();
+    this.deps.sound.throwTile();
     this.afterTurn();
   }
 
@@ -277,6 +454,10 @@ export class Controller {
   }
 
   private changed(): void {
+    // A complete set or run appears: say so.
+    const melds = this.melds.length;
+    if (melds > this.lastMeldCount) this.deps.sound.meld();
+    this.lastMeldCount = melds;
     for (const listener of this.listeners) listener();
   }
 }

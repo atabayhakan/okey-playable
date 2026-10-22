@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrangePairs, arrangeRuns, RACK_SLOTS } from '../src/app/rack';
+import { arrangePairs, arrangeRuns, GROUP_BREAK, RACK_SLOTS } from '../src/app/rack';
 import { emptySave, parseSave, SAVE_VERSION, serializeSave } from '../src/app/save';
 import { newMatch } from '../src/core/scoring';
 import { botPlanDiscard, botWantsDiscard } from '../src/core/bot';
@@ -70,7 +70,27 @@ describe('rack', () => {
     const r = dealRound(3, 0);
     for (const rack of [arrangeRuns(r.hands[0], r.okey), arrangePairs(r.hands[0], r.okey)]) {
       expect(rack).toHaveLength(RACK_SLOTS);
-      expect(rack.filter((id) => id !== null)).toHaveLength(15);
+      // Only real tiles count; the gaps between groups are markers, not tiles.
+      expect(rack.filter((id) => id !== null && id > 0)).toHaveLength(15);
+    }
+  });
+
+  it('separates the groups with a visible gap', () => {
+    const r = dealRound(3, 0);
+    const rack = arrangeRuns(r.hands[0], r.okey);
+    const tiles = rack.filter((id) => id !== null && id > 0);
+    const gaps = rack.filter((id) => id === GROUP_BREAK);
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(tiles.length).toBe(15);
+    // A gap never sits at the very end: it always separates two groups.
+    expect(rack.at(-1)).not.toBe(GROUP_BREAK);
+  });
+
+  it('keeps every tile of the hand', () => {
+    const r = dealRound(11, 2);
+    for (const rack of [arrangeRuns(r.hands[0], r.okey), arrangePairs(r.hands[0], r.okey)]) {
+      const ids = rack.filter((id): id is number => id !== null && id > 0);
+      expect(new Set(ids).size).toBe(r.hands[0].length);
     }
   });
 });
@@ -80,7 +100,7 @@ describe('save', () => {
     const save = {
       ...emptySave(),
       stats: { played: 3, won: 1, matchesPlayed: 1, matchesWon: 0 },
-      match: { points: [18, 14, 20, 16], hands: 3 },
+      match: { points: [18, 14, 20, 16], hands: 3, start: 20 },
       round: dealRound(9, 1),
       rack: null,
     };

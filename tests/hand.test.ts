@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findWinningDiscard, winningGroups, winningKind } from '../src/core/hand';
+import { findWinningDiscard, meldsInHand, winningGroups, winningKind } from '../src/core/hand';
 import { okeyFaceFor, type Color, type Face, type Tile } from '../src/core/tile';
 
 let nextId = 1000;
@@ -106,5 +106,51 @@ describe('findWinningDiscard', () => {
   it('returns null when nothing wins', () => {
     const hand = [...run('red', 1, 2), n('yellow', 9), ...rest(), n('blue', 1)];
     expect(findWinningDiscard(hand, okey)).toBeNull();
+  });
+});
+
+describe('meldsInHand', () => {
+  const letter: Record<Color, string> = { red: 'r', yellow: 'y', blue: 'u', black: 'k' };
+  const faces = (groups: Tile[][]) =>
+    groups.map((g) =>
+      g
+        .map((t) => (t.kind === 'fake' ? 'F' : `${letter[t.color]}${t.value}`))
+        .join(' '),
+    );
+
+  it('finds the sets and runs the hand already holds', () => {
+    const melds = meldsInHand([...run('blue', 7, 10), n('yellow', 4), n('black', 4), n('blue', 4), ...run('black', 11, 13), n('black', 1)], okey);
+    expect(faces(melds)).toContain('u7 u8 u9 u10');
+    expect(faces(melds)).toContain('y4 u4 k4');
+    expect(faces(melds)).toContain('k11 k12 k13');
+  });
+
+  it('counts the 12-13-1 wrap as a run', () => {
+    const melds = meldsInHand([...run('black', 11, 13), n('black', 1)], okey);
+    expect(faces(melds)).toContain('k11 k12 k13');
+  });
+
+  it('lets the wild finish a set', () => {
+    const wild = n('red', 5);
+    const melds = meldsInHand([n('yellow', 4), n('black', 4), wild, n('blue', 9), n('blue', 10)], okey);
+    expect(melds.flat().some((t) => t.id === wild.id)).toBe(true);
+    expect(melds.flat()).toHaveLength(3);
+  });
+
+  it('lets the wild finish a run', () => {
+    const wild = n('red', 5);
+    const melds = meldsInHand([n('blue', 9), n('blue', 10), wild], okey);
+    expect(faces(melds)).toContain('u9 u10 r5');
+  });
+
+  it('finds nothing in a hand of scattered tiles', () => {
+    expect(meldsInHand([n('red', 1), n('black', 5), n('blue', 9), n('yellow', 13)], okey)).toEqual([]);
+  });
+
+  it('never uses the same tile twice', () => {
+    const hand = [...run('blue', 7, 10), n('yellow', 4), n('black', 4), n('blue', 4), ...run('black', 11, 13), n('black', 1), n('red', 5)];
+    const melds = meldsInHand(hand, okey);
+    const ids = melds.flat().map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

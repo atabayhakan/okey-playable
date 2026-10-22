@@ -1,5 +1,6 @@
 import { HUMAN, type Controller } from '../app/controller';
-import { RACK_SLOTS } from '../app/rack';
+import type { Difficulty } from '../core/bot';
+import { GROUP_BREAK } from '../app/rack';
 import { canDraw, canShowIndicator, canTakeDiscard, previousSeat, SEATS } from '../core/game';
 import { winningGroups } from '../core/hand';
 import { finishedWithOkey, matchLeaders, START_POINTS } from '../core/scoring';
@@ -7,6 +8,12 @@ import { resolve, type Color, type Tile } from '../core/tile';
 import type { Strings } from '../i18n';
 
 const DRAG_THRESHOLD_PX = 6;
+/** Match lengths: the points everyone starts from. */
+const MATCH_LENGTHS: [id: 'short' | 'classic' | 'long', start: number][] = [
+  ['short', 10],
+  ['classic', 20],
+  ['long', 40],
+];
 /** Suppresses the click a browser fires after a drag ends on the dragged tile. */
 const CLICK_AFTER_DRAG_MS = 400;
 /** A shape per color, so tiles stay readable for color-blind players. */
@@ -46,6 +53,8 @@ export class View {
   private drag: Drag | null = null;
   private dirty = false;
   private ignoreClicksUntil = 0;
+  /** Tiles that already form a complete set or run; marked on the rack. */
+  private meldedIds = new Set<number>();
 
   constructor(
     private readonly root: HTMLElement,
@@ -70,11 +79,15 @@ export class View {
       return;
     }
     this.dirty = false;
+    this.meldedIds = this.game.meldedTileIds;
     const focusedKey = (document.activeElement as HTMLElement | null)?.dataset?.key;
     const modal = this.game.round.phase === 'roundOver' ? this.resultModal() : null;
-    this.root.replaceChildren(this.table(), ...(modal ? [modal] : []));
+    const coach = this.game.coachOpen ? this.coach() : null;
+    this.root.replaceChildren(this.table(), ...(modal ? [modal] : []), ...(coach ? [coach] : []));
     this.fit();
-    if (modal) {
+    if (coach) {
+      coach.querySelector<HTMLElement>('[data-action="close-coach"]')?.focus({ preventScroll: true });
+    } else if (modal) {
       modal.querySelector<HTMLElement>('[data-action="next-hand"]')?.focus({ preventScroll: true });
     } else if (focusedKey) {
       const el = this.root.querySelector<HTMLButtonElement>(`[data-key="${focusedKey}"]`);
@@ -84,24 +97,76 @@ export class View {
 
   // ---- Layout ---------------------------------------------------------------
 
-  /** Size tiles to the viewport: a 2x15 rack in landscape, 3x10 in portrait. */
+  /**
+   * Size tiles to the viewport.
+   *
+   * The rack is a grid of half-tile tracks: a tile takes two, the gap between
+   * two groups takes one. On a wide screen the rack uses more columns, so a
+   * fifteen-tile hand stays in one or two rows and the table keeps its room.
+   * On a narrow one it uses fewer columns and a bigger tile, because the
+   * touch target matters more than the row count. The table always gets at
+   * least its minimum height, otherwise the seats and the piles overlap.
+   */
   private fit(): void {
     const width = this.root.clientWidth;
     const height = this.root.clientHeight;
     if (!width || !height) return;
-    const portrait = height > width;
-    const cols = portrait ? 10 : 15;
-    const rows = RACK_SLOTS / cols;
-    const rackUnits = rows * 1.38 * 1.06 + 0.4;
-    const byWidth = (width - 16) / (cols * 1.06 + 0.5);
-    const byHeight = (height * (portrait ? 0.32 : 0.36)) / rackUnits;
-    const tileW = clamp(Math.floor(Math.min(byWidth, byHeight)), 16, 64);
-    const boardHeight = height - tileW * rackUnits - 72;
-    const boardTileW = clamp(Math.floor(boardHeight / 6), 14, tileW);
-    this.root.style.setProperty('--tile-w', `${tileW}px`);
-    this.root.style.setProperty('--btw', `${boardTileW}px`);
+    const avail = width - 16;
+    const tracks = this.rackTracks();
+    const wide = width > height;
+    const minBoard = wide ? 185 : 230;
+
+    let tile = 0;
+    let cols = 0;
+    let rackH = 0;
+    for (let t = 56; t >= 30; t -= 1) {
+      const c = 2 * Math.floor((avail / t - 0.52) / 1.04);
+      if (c < 8) continue;
+      const rows = Math.ceil(tracks / c);
+      const h = t * (1.38 * rows + 0.08 * (rows - 1) + 0.44);
+      if (height - h - 74 < minBoard) continue;
+      tile = t;
+      cols = c;
+      rackH = h;
+      break;
+    }
+    if (!tile) {
+      tile = 30;
+      cols = 8;
+      const rows = Math.ceil(tracks / cols);
+      rackH = tile * (1.38 * rows + 0.08 * (rows - 1) + 0.44);
+    }
+
+    const boardH = height - rackH - 74;
+    // The table tiles follow the room the table actually has.
+    const btw = clamp(Math.floor((boardH - (wide ? 55 : 80)) / (wide ? 2.9 : 4.31)), 16, 64);
+    const rackW = Math.floor(cols * 0.52 * tile + 0.52 * tile);
+
+    this.root.style.setProperty('--tile-w', `${tile}px`);
+    this.root.style.setProperty('--btw', `${btw}px`);
     this.root.style.setProperty('--cols', String(cols));
-    this.root.dataset.orientation = portrait ? 'portrait' : 'landscape';
+    this.root.style.setProperty('--rack-w', `${rackW}px`);
+  }
+
+  /**
+   * Grid tracks the rack uses: two for a tile, one for the gap between two
+   * groups. The empty tail of the rack is trimmed, so a hand that fits on two
+   * rows does not reserve three.
+   */
+  private rackTracks(): number {
+    const rack = this.game.rack;
+    let tracks = 0;
+    for (let i = 0; i < this.rackSlots(); i++) tracks += rack[i] === GROUP_BREAK ? 1 : 2;
+    return tracks;
+  }
+
+  /** Slots the rack actually uses, with the empty tail trimmed off. */
+  private rackSlots(): number {
+    let last = -1;
+    this.game.rack.forEach((id, i) => {
+      if (id !== null) last = i;
+    });
+    return last + 1;
   }
 
   // ---- Building blocks --------------------------------------------------------
@@ -120,7 +185,25 @@ export class View {
         this.center(),
         this.seat(1, 'right'),
         this.discardPile(3, 'bl'),
-        h('div', { class: `status${this.game.notice ? ` notice ${this.game.notice.kind}` : ''}`, role: 'status', 'aria-live': 'polite' }, this.statusText()),
+        h(
+          'div',
+          { class: `status${this.game.notice ? ` notice ${this.game.notice.kind}` : ''}`, role: 'status', 'aria-live': 'polite' },
+          h('span', { class: 'status-text' }, this.statusText()),
+          // The hint rides along in the status bar: no new button on the table.
+          this.game.hintAvailable
+            ? h(
+                'button',
+                {
+                  class: `hint-button${this.game.hintCostsAd ? ' ad' : ''}`,
+                  'data-action': 'hint',
+                  'data-key': 'hint',
+                  'aria-label': this.t.hintLabel,
+                  title: this.game.hintCostsAd ? this.t.hintAdLabel : this.t.hintLabel,
+                },
+                this.game.hintCostsAd ? `${this.t.hint} 🎬` : this.t.hint,
+              )
+            : null,
+        ),
         this.discardPile(0, 'br'),
       ),
       this.toolbar(),
@@ -160,19 +243,26 @@ export class View {
     if (seat === previousSeat(HUMAN)) {
       const takeable = canTakeDiscard(r, HUMAN);
       const label = top ? this.t.takeDiscard(this.describe(top)) : this.t.emptyDiscard;
-      return h('button', { class: `discard ${area}${takeable ? ' takeable' : ''}`, 'data-action': 'take', 'data-key': 'take', disabled: !takeable, 'aria-label': label }, face);
+      // An empty pile stays a quiet outline: it is a target only while it is
+      // live, otherwise three empty boxes are just noise on the table.
+      return h('button', { class: `discard ${area}${takeable ? ' takeable' : ''}${top ? '' : ' empty'}`, 'data-action': 'take', 'data-key': 'take', disabled: !takeable, 'aria-label': label }, face);
     }
     if (seat === HUMAN) {
       const active = this.game.humanMustDiscard;
-      return h('button', { class: `discard ${area}${active ? ' target' : ''}`, 'data-action': 'discard', 'data-drop': 'discard', 'data-key': 'discard', disabled: !active, 'aria-label': this.t.discardHere }, face);
+      const hint = active && !top ? h('span', { class: 'hint' }, h('span', { 'aria-hidden': 'true' }, '↓'), this.t.discardHere) : null;
+      return h('button', { class: `discard ${area}${active ? ' target' : ''}${top ? '' : ' empty'}`, 'data-action': 'discard', 'data-drop': 'discard', 'data-key': 'discard', disabled: !active, 'aria-label': this.t.discardHere }, face, hint);
     }
-    return h('div', { class: `discard ${area}` }, face);
+    return h('div', { class: `discard ${area}${top ? '' : ' empty'}` }, face);
   }
 
   private center(): HTMLElement {
     const r = this.game.round;
     const t = this.t;
     const finishing = this.game.humanMustDiscard;
+    // The finish zone only exists while a tile is held: a permanent, disabled
+    // circle in the middle of the table is noise that promises a move the
+    // player cannot make.
+    const canTryFinish = finishing && this.game.selected !== null;
     return h(
       'div',
       { class: 'center' },
@@ -183,7 +273,9 @@ export class View {
         h('span', { class: 'pile-count' }, String(r.pile.length)),
       ),
       h('div', { class: 'indicator' }, this.tile(r.indicator), this.indicatorCaption()),
-      h('button', { class: `finish${finishing ? ' target' : ''}`, 'data-action': 'finish', 'data-drop': 'finish', 'data-key': 'finish', disabled: !finishing }, t.finish),
+      canTryFinish
+        ? h('button', { class: 'finish target', 'data-action': 'finish', 'data-drop': 'finish', 'data-key': 'finish' }, t.finish)
+        : null,
     );
   }
 
@@ -207,7 +299,14 @@ export class View {
     if (r.phase === 'roundOver') return '';
     if (notice?.kind === 'invalidFinish') return t.invalidFinish;
     if (notice?.kind === 'indicatorShown') return notice.seat === HUMAN ? t.youShowedIndicator : t.indicatorNotice(this.seatName(notice.seat));
-    if (r.turn === HUMAN) return r.phase === 'draw' ? t.drawPrompt : t.discardPrompt;
+    if (notice?.kind === 'noAd') return t.noAd;
+    if (this.game.hintTileId !== null) return t.hintShown;
+    if (r.turn === HUMAN) {
+      if (r.phase === 'draw') return t.drawPrompt;
+      // The finish zone only exists while a tile is held, so the prompt follows
+      // the board instead of advertising a move that is not on screen.
+      return this.game.selected !== null ? t.finishPrompt : t.discardPrompt;
+    }
     return t.waiting(this.seatName(r.turn));
   }
 
@@ -220,39 +319,101 @@ export class View {
       h(
         'div',
         { class: 'tools' },
-        h('button', { class: 'chip', 'data-action': 'sort-runs', 'data-key': 'sort-runs' }, t.sortRuns),
-        h('button', { class: 'chip', 'data-action': 'sort-pairs', 'data-key': 'sort-pairs' }, t.sortPairs),
+        h(
+          'details',
+          { class: 'menu' },
+          h('summary', { class: 'chip', 'data-key': 'arrange' }, t.arrange),
+          h(
+            'div',
+            { class: 'menu-list' },
+            h('button', { class: 'chip', 'data-action': 'sort-melds', 'data-key': 'sort-melds' }, t.sortMelds),
+            h('button', { class: 'chip', 'data-action': 'sort-runs', 'data-key': 'sort-runs' }, t.sortRuns),
+            h('button', { class: 'chip', 'data-action': 'sort-pairs', 'data-key': 'sort-pairs' }, t.sortPairs),
+            h('button', { class: 'chip', 'data-action': 'clear-arrange', 'data-key': 'clear-arrange' }, t.clearArrange),
+          ),
+        ),
       ),
+      h(
+        'div',
+        { class: 'tools' },
+        h('div', { class: 'hand-value', title: t.handValueHint }, h('b', {}, String(this.game.handValue)), h('span', { class: 'unit' }, t.handValueShort)),
+      ),
+      // How many complete sets and runs the hand already holds.
+      h(
+        'div',
+        { class: 'tools' },
+        h(
+          'div',
+          { class: `meld-count${this.game.melds.length ? ' has' : ''}`, title: t.meldHint },
+          '✓ ',
+          h('b', {}, String(this.game.melds.length)),
+        ),
+      ),
+      // The rules card can be reopened at any time.
+      h('button', { class: 'chip help', 'data-action': 'open-coach', 'data-key': 'open-coach', 'aria-label': t.coachHelp, title: t.coachHelp }, '?'),
       // While the result is up the hand counter already includes it; show the hand it was.
-      h('div', { class: 'score' }, t.yourPoints(match.points[HUMAN], this.game.round.phase === 'roundOver' ? match.hands : match.hands + 1)),
+      h('div', { class: 'score' }, t.yourPoints(match.points[HUMAN])),
     );
   }
 
+  /**
+   * The rack shows only the tiles that are on it. Free slots stay invisible and
+   * group breaks are thin gaps, so the eye reads "one run, one set" instead of
+   * a grid of empty boxes.
+   */
   private rack(): HTMLElement {
     const byId = new Map(this.game.round.hands[HUMAN].map((tile) => [tile.id, tile]));
-    return h(
-      'div',
-      { class: 'rack' },
-      ...this.game.rack.map((id, slot) => {
-        const tile = id === null ? undefined : byId.get(id);
-        return h('div', { class: 'slot', 'data-drop': 'slot', 'data-slot': slot }, tile && this.tile(tile, true));
-      }),
-    );
+    const children: Child[] = [];
+    // Only the used part of the rack is drawn. The trailing empty slots used to
+    // be rendered as invisible cells, which still took a full tile width each
+    // and pushed the hand off the bottom of the screen.
+    const used = this.rackSlots();
+    for (let slot = 0; slot < used; slot++) {
+      const id = this.game.rack[slot];
+      if (id === GROUP_BREAK) {
+        children.push(h('div', { class: 'slot gap', 'data-drop': 'slot', 'data-slot': slot }));
+        continue;
+      }
+      if (id === null) {
+        // Invisible drop space, so a tile can still be parked here.
+        children.push(h('div', { class: 'slot empty', 'data-drop': 'slot', 'data-slot': slot }));
+        continue;
+      }
+      const tile = byId.get(id);
+      // The deal cascades: each tile lands a beat after the one before it.
+      if (tile) children.push(this.tile(tile, true, slot));
+    }
+    return h('div', { class: 'rack' }, ...children);
   }
 
-  private tile(tile: Tile, onRack = false): HTMLElement {
+  private tile(tile: Tile, onRack = false, order = 0): HTMLElement {
     const g = this.game;
     const fake = tile.kind === 'fake';
     const wild = resolve(tile, g.round.okey).wild;
     const selected = onRack && g.selected === tile.id;
-    const cls = ['tile', fake && 'fake', wild && 'wild', selected && 'selected', onRack && g.lastDrawn === tile.id && 'fresh'].filter(Boolean).join(' ');
+    const fresh = onRack && g.lastDrawn === tile.id;
+    const melded = onRack && this.meldedIds.has(tile.id);
+    const hinted = onRack && g.hintTileId === tile.id;
+    const cls = [
+      'tile',
+      fake && 'fake',
+      wild && 'wild',
+      melded && 'melded',
+      hinted && 'hinted',
+      selected && 'selected',
+      fresh && 'fresh',
+      g.dealing && 'dealing',
+      g.discardingId === tile.id && 'discarding',
+    ]
+      .filter(Boolean)
+      .join(' ');
     const body = [
       h('span', { class: 'value' }, fake ? '★' : String(tile.value)),
       h('span', { class: 'mark', 'aria-hidden': 'true' }, fake ? '' : COLOR_MARKS[tile.color]),
     ];
     const attrs: Attrs = { class: cls, 'data-color': fake ? undefined : tile.color, 'aria-label': this.describe(tile) };
     if (!onRack) return h('span', { ...attrs, role: 'img' }, ...body);
-    return h('button', { ...attrs, 'data-tile-id': tile.id, 'data-key': `tile-${tile.id}`, 'aria-pressed': String(selected) }, ...body);
+    return h('button', { ...attrs, style: `--i:${order}`, 'data-tile-id': tile.id, 'data-key': `tile-${tile.id}`, 'aria-pressed': String(selected) }, ...body);
   }
 
   private describe(tile: Tile): string {
@@ -261,8 +422,88 @@ export class View {
     return `${this.t.colors[tile.color]} ${tile.value}${wild ? ` (${this.t.okey})` : ''}`;
   }
 
+  /** The one-time rules card. It can be reopened from the toolbar. */
+  private coach(): HTMLElement {
+    const t = this.t;
+    const points = [t.coachDraw, t.coachDiscard, t.coachSets, t.coachOkey, t.coachMeld];
+    const levels: Difficulty[] = ['easy', 'normal', 'hard'];
+    return h(
+      'div',
+      { class: 'modal-backdrop' },
+      h(
+        'div',
+        { class: 'modal coach', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'coach-title' },
+        h(
+          'div',
+          { class: 'modal-body' },
+          h('h2', { id: 'coach-title' }, t.coachTitle),
+          h(
+            'ul',
+            { class: 'coach-list' },
+            ...points.map((point) => h('li', {}, point)),
+          ),
+          // How sharp the computer opponents are.
+          h(
+            'div',
+            { class: 'difficulty' },
+            h('span', { class: 'label' }, t.difficultyLabel),
+            ...levels.map((level) =>
+              h(
+                'button',
+                {
+                  class: `chip${this.game.difficulty === level ? ' on' : ''}`,
+                  'data-action': 'difficulty',
+                  'data-level': level,
+                  'data-key': `difficulty-${level}`,
+                  'aria-pressed': String(this.game.difficulty === level),
+                },
+                t.difficulty[level],
+              ),
+            ),
+          ),
+          // How long a match runs: it applies to the next match.
+          h(
+            'div',
+            { class: 'difficulty' },
+            h('span', { class: 'label' }, t.matchLengthLabel),
+            ...MATCH_LENGTHS.map(([id, start]) =>
+              h(
+                'button',
+                {
+                  class: `chip${this.game.matchStart === start ? ' on' : ''}`,
+                  'data-action': 'match-length',
+                  'data-start': String(start),
+                  'data-key': `match-${id}`,
+                  'aria-pressed': String(this.game.matchStart === start),
+                },
+                t.matchLength[id],
+              ),
+            ),
+          ),
+          // The colored okey: a red or black indicator makes the okey count double.
+          h(
+            'div',
+            { class: 'difficulty' },
+            h('span', { class: 'label' }, t.coloredOkeyLabel),
+            h(
+              'button',
+              {
+                class: `chip${this.game.coloredOkey ? ' on' : ''}`,
+                'data-action': 'colored-okey',
+                'data-key': 'colored-okey',
+                'aria-pressed': String(this.game.coloredOkey),
+              },
+              this.game.coloredOkey ? t.on : t.off,
+            ),
+          ),
+        ),
+        h('button', { class: 'primary', 'data-action': 'close-coach', 'data-key': 'close-coach' }, t.coachStart),
+      ),
+    );
+  }
+
   private resultModal(): HTMLElement {
-    const { round: r, stats, match, matchOver } = this.game;
+    const { round: r, stats, match, matchOver, seed } = this.game;
     const t = this.t;
     const title = r.winner === null ? t.drawnRound : r.winner === HUMAN ? t.youWon : t.someoneWon(this.seatName(r.winner));
     const detail = r.winKind ? t.finishedWith(r.winKind === 'pairs', finishedWithOkey(r)) : '';
@@ -286,6 +527,8 @@ export class View {
           this.scoreTable(matchOver ? leaders : []),
           h('p', { class: 'rule' }, t.matchRule(START_POINTS)),
           h('p', { class: 'lifetime' }, t.lifetime(stats.won, stats.played, stats.matchesWon, stats.matchesPlayed)),
+          // The seed makes the deal reproducible: the hand can be checked, not trusted.
+          seed !== null && h('p', { class: 'seed' }, `${t.handSeed}: ${seed}`),
         ),
         h('button', { class: 'primary', 'data-action': 'next-hand', 'data-key': 'next-hand' }, matchOver ? t.newMatch : t.nextHand),
       ),
@@ -322,8 +565,18 @@ export class View {
   /** The winner's tiles split into the melds or pairs that make it a win, each wild in place. */
   private winningHand(seat: number): HTMLElement[] {
     const r = this.game.round;
-    const groups = winningGroups(r.hands[seat], r.okey)?.groups ?? [r.hands[seat]];
+    const groups = winningGroups(r.hands[seat], r.okey)?.groups ?? this.looseGroups(r.hands[seat]);
     return groups.map((group) => h('span', { class: 'meld' }, ...group.map((tile) => this.tile(tile))));
+  }
+
+  /**
+   * The hand did not win (the pile ran out). It is shown in rows of seven so a
+   * long row cannot push the dialog off the screen.
+   */
+  private looseGroups(hand: readonly Tile[]): Tile[][] {
+    const groups: Tile[][] = [];
+    for (let i = 0; i < hand.length; i += 7) groups.push(hand.slice(i, i + 7));
+    return groups;
   }
 
   // ---- Input ------------------------------------------------------------------
@@ -355,14 +608,48 @@ export class View {
         break;
       case 'sort-runs':
         g.sortRuns();
+        this.closeMenu();
         break;
       case 'sort-pairs':
         g.sortPairs();
+        this.closeMenu();
+        break;
+      case 'sort-melds':
+        g.sortMelds();
+        this.closeMenu();
+        break;
+      case 'clear-arrange':
+        g.clearArrange();
+        this.closeMenu();
+        break;
+      case 'close-coach':
+        g.closeCoach();
+        break;
+      case 'open-coach':
+        g.openCoach();
+        break;
+      case 'hint':
+        void g.requestHint();
+        break;
+      case 'difficulty':
+        g.setDifficulty(target.dataset.level as Difficulty);
+        break;
+      case 'match-length':
+        g.setMatchStart(Number(target.dataset.start));
+        break;
+      case 'colored-okey':
+        g.setColoredOkey(!g.coloredOkey);
         break;
       case 'next-hand':
         void g.nextHand();
         break;
     }
+  }
+
+  private closeMenu(): void {
+    this.root.querySelectorAll<HTMLDetailsElement>('details.menu[open]').forEach((d) => {
+      d.open = false;
+    });
   }
 
   private onKey(e: KeyboardEvent): void {
@@ -372,15 +659,63 @@ export class View {
       if (g.round.phase === 'roundOver') void g.nextHand();
       return;
     }
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+    if (!keys.includes(e.key)) return;
     if (g.round.phase === 'roundOver') return;
-    const ids = g.rack.filter((id): id is number => id !== null);
-    if (ids.length === 0) return;
+    const rows = this.rackRows();
+    if (rows.length === 0) return;
     e.preventDefault();
-    const i = g.selected === null ? -1 : ids.indexOf(g.selected);
-    const next = e.key === 'ArrowRight' ? (i + 1) % ids.length : i <= 0 ? ids.length - 1 : i - 1;
-    g.select(ids[next]);
-    this.root.querySelector<HTMLElement>(`[data-key="tile-${ids[next]}"]`)?.focus({ preventScroll: true });
+
+    // The rack wraps into rows, so the arrows follow what the eye sees.
+    const current = g.selected;
+    let row = 0;
+    let column = 0;
+    if (current !== null) {
+      const found = rows.findIndex((ids) => ids.includes(current));
+      if (found !== -1) {
+        row = found;
+        column = rows[found].indexOf(current);
+      }
+    }
+    let nextRow = row;
+    let nextColumn = column;
+    if (e.key === 'ArrowRight') {
+      nextColumn = column + 1;
+      if (nextColumn >= rows[row].length) {
+        nextRow = (row + 1) % rows.length;
+        nextColumn = 0;
+      }
+    } else if (e.key === 'ArrowLeft') {
+      nextColumn = column - 1;
+      if (nextColumn < 0) {
+        nextRow = (row - 1 + rows.length) % rows.length;
+        nextColumn = rows[nextRow].length - 1;
+      }
+    } else if (e.key === 'ArrowDown') {
+      nextRow = (row + 1) % rows.length;
+      nextColumn = Math.min(column, rows[nextRow].length - 1);
+    } else {
+      nextRow = (row - 1 + rows.length) % rows.length;
+      nextColumn = Math.min(column, rows[nextRow].length - 1);
+    }
+    const id = rows[nextRow][nextColumn];
+    g.select(id);
+    this.root.querySelector<HTMLElement>(`[data-key="tile-${id}"]`)?.focus({ preventScroll: true });
+  }
+
+  /** The rack's tiles grouped by the row they are drawn on. */
+  private rackRows(): number[][] {
+    const rows: number[][] = [];
+    let lastTop = -1;
+    for (const el of this.root.querySelectorAll<HTMLElement>('.rack [data-tile-id]')) {
+      const top = el.offsetTop;
+      if (top !== lastTop) {
+        rows.push([]);
+        lastTop = top;
+      }
+      rows[rows.length - 1].push(Number(el.dataset.tileId));
+    }
+    return rows;
   }
 
   private onPointerDown(e: PointerEvent): void {

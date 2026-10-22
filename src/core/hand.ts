@@ -1,4 +1,4 @@
-import { COLORS, resolve, type Face, type Tile } from './tile';
+import { COLORS, resolve, type Color, type Face, type Tile } from './tile';
 
 export type WinKind = 'sets' | 'pairs';
 
@@ -40,6 +40,100 @@ export function winningKind(tiles: readonly Tile[], okey: Face): WinKind | null 
 }
 
 export const isWinningHand = (tiles: readonly Tile[], okey: Face): boolean => winningKind(tiles, okey) !== null;
+
+/**
+ * The complete melds a hand already holds: sets of three or four of the same
+ * value, and runs of three or more in one colour. The wild may stand in for a
+ * missing tile, so two tiles plus the wild is a set or a run as well.
+ *
+ * The player cannot see this on the felt, so the view marks the tiles: it is
+ * the difference between "I think I have something" and "I have two sets".
+ */
+export function meldsInHand(tiles: readonly Tile[], okey: Face): Tile[][] {
+  const wilds: Tile[] = [];
+  const pool: Tile[] = [];
+  for (const tile of tiles) {
+    if (resolve(tile, okey).wild) wilds.push(tile);
+    else pool.push(tile);
+  }
+
+  const counts = COLORS.map(() => new Array<number>(14).fill(0));
+  const byFace = new Map<string, Tile[]>();
+  for (const tile of pool) {
+    const r = resolve(tile, okey);
+    if (r.wild) continue;
+    counts[COLORS.indexOf(r.color)][r.value]++;
+    const key = `${r.color}-${r.value}`;
+    byFace.set(key, [...(byFace.get(key) ?? []), tile]);
+  }
+  const take = (color: Color, value: number): Tile => {
+    const key = `${color}-${value}`;
+    const tile = byFace.get(key)!.shift()!;
+    counts[COLORS.indexOf(color)][value]--;
+    return tile;
+  };
+
+  const melds: Tile[][] = [];
+
+  // Sets first: three or four of the same value in different colours is the
+  // scarcest meld, so it is worth taking before any run.
+  for (let value = 1; value <= 13; value++) {
+    for (;;) {
+      const colors = COLORS.filter((c) => counts[COLORS.indexOf(c)][value] > 0);
+      if (colors.length >= 3) {
+        melds.push(colors.slice(0, 4).map((c) => take(c, value)));
+        continue;
+      }
+      if (colors.length === 2 && wilds.length > 0) {
+        melds.push([take(colors[0], value), take(colors[1], value), wilds.shift()!]);
+        continue;
+      }
+      break;
+    }
+  }
+
+  // Runs: the long ones first, then the 12-13-1 wrap, then what the wild
+  // completes. The wrap is only taken when it does not break a longer run.
+  for (const color of COLORS) {
+    const c = COLORS.indexOf(color);
+    const longestRun = (): number[] => {
+      let best: number[] = [];
+      let run: number[] = [];
+      for (let value = 1; value <= 13; value++) {
+        if (counts[c][value] > 0) {
+          run.push(value);
+          if (run.length > best.length) best = [...run];
+        } else {
+          run = [];
+        }
+      }
+      return best;
+    };
+    for (;;) {
+      const seq = longestRun();
+      if (seq.length >= 3) {
+        melds.push(seq.map((v) => take(color, v)));
+        continue;
+      }
+      // The only way a run crosses from 13 back to 1.
+      if (counts[c][12] > 0 && counts[c][13] > 0 && counts[c][1] > 0) {
+        melds.push([take(color, 12), take(color, 13), take(color, 1)]);
+        continue;
+      }
+      if (seq.length === 2 && wilds.length > 0) {
+        melds.push([take(color, seq[0]), take(color, seq[1]), wilds.shift()!]);
+        continue;
+      }
+      if (seq.length === 1 && wilds.length >= 2) {
+        melds.push([take(color, seq[0]), wilds.shift()!, wilds.shift()!]);
+        continue;
+      }
+      break;
+    }
+  }
+
+  return melds;
+}
 
 /** For a 15-tile hand: a tile whose discard leaves a winning 14, or null. */
 export function findWinningDiscard(hand: readonly Tile[], okey: Face): Tile | null {

@@ -30,6 +30,14 @@ Herkes 20 puanla başlar; bir elin sonunda biri 0 veya altına inerse maç biter
 puanlı kazanır (eşitlikte paylaşılır). Sahte okey atmak "okey atarak bitiş" sayılmaz.
 Değerler `src/core/scoring.ts` içinde. YouTube'a gönderilen skor kazanılan el sayısı.
 
+**İsteğe bağlı kurallar** (kurallar kartından seçilir, kayda yazılır):
+
+| Kural | Etkisi |
+|---|---|
+| Maç uzunluğu: kısa / klasik / uzun | 10 / 20 / 40 puanla başlar, sonraki maçtan itibaren |
+| Renkli okey | Gösterge kırmızı ya da siyahsa okey iki kat sayılır: okey atarak bitiş 8 (çiftten 16) puan |
+| Rakip zorluğu: kolay / normal / zor | Botlar ne kadar agresif taş alır, elini ne kadar korur |
+
 Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume()`,
 `okeyDev.setAudio(false)`, `okeyDev.clearSave()` ile YouTube olaylarını taklit edebilirsin.
 `okeyGame` / `okeyView` ile oyun durumuna doğrudan erişilebilir (yalnızca `npm run dev`; build'e girmez).
@@ -38,7 +46,7 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 
 | Klasör | İçerik |
 |---|---|
-| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), tur akışı, gösterge, puanlama, botlar |
+| `src/core/` | Saf oyun mantığı (DOM yok): taşlar, deste, okey/gösterge, el doğrulama (seri, per, çift, 12-13-1), eldeki per/seri bulma, tur akışı, gösterge, puanlama, botlar |
 | `src/app/` | Kontrolcü (tur sırası, botlar, maç puanı, kayıt + sürüm geçişi), ıstaka düzeni, duraklatılabilir zamanlayıcı, ses |
 | `src/platform/` | `ytgame` SDK sarmalayıcısı ve tipleri; Playables dışında yerel yedek |
 | `src/ui/` | Masa görünümü, sürükle-bırak, stiller |
@@ -56,7 +64,7 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 | `onPause`/`onResume`: her şeyi durdur, kaydet | `Scheduler` tüm bot zamanlayıcılarını dondurur, `Sound` susar |
 | YouTube ses ayarı, oyunda ayrı sessize alma düğmesi yok | `src/app/sound.ts` |
 | Dil `getLanguage()` ile, İngilizce zorunlu | `src/i18n.ts` |
-| Her en-boy oranı, yön kilidi yok | `View.fit()`: yatayda 2×15, dikeyde 3×10 ıstaka |
+| Her en-boy oranı, yön kilidi yok | `View.fit()`: ıstaka ekran genişliğine göre sütun sayısını kendi ayarlar; dikeyde 3-4 satır, yatayda 1-2 satır |
 | Dokunma + fare (+ klavye) | Pointer Events; ←/→ taş seçer, Tab/Enter ile her şey kullanılabilir |
 | Esc engellenmez | `View.onKey` |
 | Harici istek, dış font, giriş ekranı, dış link yok | Sistem fontu; ağ çağrısı yok |
@@ -64,13 +72,50 @@ Geliştirme sırasında tarayıcı konsolunda `okeyDev.pause()`, `okeyDev.resume
 | `sendScore` = kayıttaki skor | Kazanılan el sayısı |
 | Worker / WebAssembly / eval / localStorage yok | Build denetimi kontrol eder |
 
+## Oyuncuya ne gösterilir
+
+- **Tamamlanmış per ve seriler yeşil halkayla işaretlenir.** `meldsInHand()` elde
+  hazır duran perleri (aynı sayı, farklı renk) ve serileri (aynı renk, art arda;
+  12-13-1 dâhil) bulur, okey de eksik taşın yerine geçer. Araç çubuğundaki
+  "✓ n" sayacı bunları sayar.
+- **"Düzenle → En iyi diz"** eli önce tamamlanmış grupları öne alarak dizer;
+  kalan taşlar renklerine göre gruplanır. El yeni dağıtıldığında da bu dizilim
+  kullanılır, yani oyuncu elini ilk andan itibaren gruplu görür.
+- **İlk elde kurallar kartı** çıkar, istendiğinde araç çubuğundaki "?" ile
+  yeniden açılır (`coachSeen` kayıtta tutulur, `SAVE_VERSION = 3`).
+- **İpucu**: durum çubuğundaki düğme, eli bozan en az taşı gösterir (ve el
+  bir taş kala bitiyorsa o taşı gösterir). Elin ilk ipucu bedavadır; eldeki
+  ikinci ipucu için kısa bir ödüllü reklam izlenir (`requestRewardedAd`).
+  Reklam gelmezse oyun yine devam eder, oyuncuya "reklam yok" denir.
+- **Rakip zorluğu** kurallar kartından seçilir: kolay, normal, zor. Zor
+  rakipler per tamamlayan taşı alır ve elini korur; kolay rakipler daha
+  savunmasız oynar. Kayıtta saklanır (`SAVE_VERSION = 4`).
+- **El değeri** rozeti eldeki taşların toplam değerini gösterir.
+- **Bitirme** düğmesi yalnızca bir taş seçiliyken belirir; el bitince
+  "Bitir" hedefi ortaya çıkar.
+- **Ses**: taş çekme, atma, gösterge, per tamamlama, el bitirme ve sıra geldi
+  için ayrı sesler. Hepsi sentezlenir, dosya yoktur; ilk dokunuştan önce
+  AudioContext açılmaz (tarayıcı otomatik ses politikası).
+
+## Kontrol
+
+| Girdi | Sonuç |
+|---|---|
+| Dokunma / fare | Taşa dokun seçer, düğmelere basar; sürükle-bırak ıstakada taşı taşır |
+| ← → | Görsel satır içinde taşı seçer (satır sonunda sonraki satıra geçer) |
+| ↑ ↓ | Satırlar arasında aynı sütunda gezinir |
+| Tab / Enter | Her düğme erişilebilir |
+| Esc | Engellenmez (Playables buna bağlı) |
+
 ## Yapılacaklar
 
 - [x] Puanlama ve maç yapısı
-- [ ] İsteğe bağlı kurallar: renkli okey (kırmızı/siyah göstergede çift puan), tek renk bitiş, başlangıç puanı seçimi
-- [ ] Daha güçlü botlar (rakibe yarayacak taşı atmamak, çifte gitme kararı)
-- [ ] Animasyonlar (taş dağıtma, atma)
-- [ ] Ödüllü reklam: ör. "ipucu" (`requestRewardedAd`)
-- [ ] Kısa öğretici / ilk el ipuçları
+- [x] Tamamlanmış per/seri göstergesi ve "en iyi diz" düzenlemesi
+- [x] Daha güçlü botlar (eli bozan taşı atmamak, per tamamlayan taşı almak)
+- [x] Kısa öğretici (kurallar kartı) ve ipucu
+- [x] Animasyonlar (taş dağıtma, atma) ve ayrık sesler
+- [x] İsteğe bağlı kurallar: maç uzunluğu, renkli okey, bot zorluğu
+- [ ] Tek renk bitiş kuralı (çözücü ayrı bir sürüm ister)
+- [x] Ödüllü reklam: ipucunun ikinci kullanımı (`requestRewardedAd`)
 - [ ] Erken erişime kabul edilince resmî test paketi ile doğrulama
 - [ ] Mağaza görselleri (başlıkta/küçük resimde logo olmamalı)

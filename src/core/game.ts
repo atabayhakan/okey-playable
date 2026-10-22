@@ -28,6 +28,8 @@ export interface RoundState {
   turnsTaken: number[];
   /** Seat that showed a copy of the indicator (gösterge), if any. */
   indicatorShownBy: number | null;
+  /** Seed the hand was dealt from: the deal can be replayed and checked. */
+  seed: number;
 }
 
 export const nextSeat = (seat: number): number => (seat + 1) % SEATS;
@@ -52,6 +54,7 @@ export function dealRound(seed: number, starter: number): RoundState {
     finishTile: null,
     turnsTaken: new Array<number>(SEATS).fill(0),
     indicatorShownBy: null,
+    seed,
   };
 }
 

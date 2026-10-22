@@ -1,6 +1,7 @@
 import { TILE_COUNT } from '../core/deck';
+import type { Difficulty } from '../core/bot';
 import { SEATS, type RoundState } from '../core/game';
-import { newMatch, type MatchState } from '../core/scoring';
+import { newMatch, START_POINTS, type MatchState } from '../core/scoring';
 import type { Rack } from './rack';
 
 /**
@@ -9,8 +10,10 @@ import type { Rack } from './rack';
  *
  * v1: stats { played, won }, round, rack
  * v2: + match points, match stats, round.turnsTaken / round.indicatorShownBy
+ * v3: + coachSeen, so the rules card is only shown once
+ * v4: + difficulty, the strength of the computer opponents
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 4;
 
 export interface Stats {
   /** Hands played and won; `won` is the score sent to YouTube. */
@@ -27,6 +30,14 @@ export interface SaveData {
   /** The hand in progress, so a player can leave and come back. */
   round: RoundState | null;
   rack: Rack | null;
+  /** The rules card has been read and closed. */
+  coachSeen: boolean;
+  /** How sharp the computer opponents are. */
+  difficulty: Difficulty;
+  /** The points a new match starts from. */
+  matchStart: number;
+  /** The colored okey: a red or black indicator makes the okey count double. */
+  coloredOkey: boolean;
 }
 
 export const emptySave = (): SaveData => ({
@@ -35,6 +46,10 @@ export const emptySave = (): SaveData => ({
   match: newMatch(),
   round: null,
   rack: null,
+  coachSeen: false,
+  difficulty: 'normal',
+  matchStart: START_POINTS,
+  coloredOkey: false,
 });
 
 export const serializeSave = (save: SaveData): string => JSON.stringify(save);
@@ -54,6 +69,8 @@ type Raw = Record<string, unknown>;
 function upgrade(data: unknown): SaveData {
   let d = (isObject(data) ? data : {}) as Raw;
   if (d.v === 1) d = v1ToV2(d);
+  if (d.v === 2) d = v2ToV3(d);
+  if (d.v === 3) d = v3ToV4(d);
 
   const save = emptySave();
   const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
@@ -61,9 +78,16 @@ function upgrade(data: unknown): SaveData {
   save.stats.won = Math.min(count(stats.won), save.stats.played);
   save.stats.matchesPlayed = count(stats.matchesPlayed);
   save.stats.matchesWon = Math.min(count(stats.matchesWon), save.stats.matchesPlayed);
+  save.coachSeen = d.coachSeen === true;
+  save.difficulty = isDifficulty(d.difficulty) ? d.difficulty : 'normal';
+  save.matchStart = typeof d.matchStart === 'number' && d.matchStart > 0 ? d.matchStart : START_POINTS;
+  save.coloredOkey = d.coloredOkey === true;
   if (d.v !== SAVE_VERSION) return save;
 
-  if (looksLikeMatch(d.match)) save.match = d.match;
+  if (looksLikeMatch(d.match)) {
+    const m = d.match;
+    save.match = { points: m.points, hands: m.hands, start: typeof m.start === 'number' ? m.start : START_POINTS };
+  }
   if (looksLikeRound(d.round)) {
     save.round = d.round;
     save.rack = Array.isArray(d.rack) ? (d.rack as Rack) : null;
@@ -82,6 +106,18 @@ function v1ToV2(d: Raw): Raw {
     round: round && { ...round, turnsTaken: new Array<number>(SEATS).fill(1), indicatorShownBy: null },
   };
 }
+
+/** v2 had no rules card. Players who already have a game do not need it again. */
+function v2ToV3(d: Raw): Raw {
+  return { ...d, v: 3, coachSeen: true };
+}
+
+/** v3 had no difficulty setting. */
+function v3ToV4(d: Raw): Raw {
+  return { ...d, v: 4, difficulty: 'normal' };
+}
+
+const isDifficulty = (x: unknown): x is Difficulty => x === 'easy' || x === 'normal' || x === 'hard';
 
 const isObject = (x: unknown): x is object => typeof x === 'object' && x !== null;
 

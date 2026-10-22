@@ -10,7 +10,7 @@ import {
   takeDiscard,
   type RoundState,
 } from '../src/core/game';
-import { isMatchOver, matchLeaders, newMatch, PENALTY, roundPenalties, scoreRound, START_POINTS } from '../src/core/scoring';
+import { finishPenalty, isColoredOkey, isMatchOver, matchLeaders, newMatch, PENALTY, roundPenalties, scoreRound, START_POINTS } from '../src/core/scoring';
 import type { Tile } from '../src/core/tile';
 
 /** A round that ended with `winner` finishing by throwing `finish`. */
@@ -58,7 +58,7 @@ describe('roundPenalties', () => {
 
 describe('match', () => {
   it('starts everyone on the same points', () => {
-    expect(newMatch()).toEqual({ points: [START_POINTS, START_POINTS, START_POINTS, START_POINTS], hands: 0 });
+    expect(newMatch()).toEqual({ points: [START_POINTS, START_POINTS, START_POINTS, START_POINTS], hands: 0, start: START_POINTS });
   });
 
   it('applies a hand and ends when someone reaches zero', () => {
@@ -171,4 +171,27 @@ describe('bot finishing', () => {
 
 it('penalty table matches the classic rules', () => {
   expect(PENALTY).toEqual({ win: 2, okeyFinish: 4, pairs: 4, pairsOkeyFinish: 8, indicator: 1 });
+});
+
+it('the colored okey doubles the okey finish', () => {
+  expect(finishPenalty('sets', false)).toBe(2);
+  expect(finishPenalty('sets', true)).toBe(4);
+  expect(finishPenalty('sets', true, true)).toBe(8);
+  expect(finishPenalty('pairs', true, true)).toBe(16);
+  // A normal finish is not affected by the color.
+  expect(finishPenalty('sets', false, true)).toBe(2);
+});
+
+it('a match starts from the chosen points', () => {
+  expect(newMatch().points).toEqual([20, 20, 20, 20]);
+  expect(newMatch(10).points).toEqual([10, 10, 10, 10]);
+  expect(newMatch(40).start).toBe(40);
+});
+
+it('knows a red or black indicator makes a colored okey', () => {
+  const r = dealRound(3, 0);
+  r.indicator = { id: 900, kind: 'number', color: 'red', value: 4 };
+  expect(isColoredOkey(r)).toBe(true);
+  r.indicator = { id: 901, kind: 'number', color: 'blue', value: 4 };
+  expect(isColoredOkey(r)).toBe(false);
 });
