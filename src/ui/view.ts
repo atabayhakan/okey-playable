@@ -7,7 +7,7 @@ import { winningGroups } from '../core/hand';
 import { finishedWithOkey, isSingleColorHand, matchLeaders, START_POINTS } from '../core/scoring';
 import { resolve, type Color, type Tile } from '../core/tile';
 import type { Strings } from '../i18n';
-import { flash, flyAway, Flights, moveTo, rectOf, reducedMotion, type Rect } from './flight';
+import { flash, flyAway, Flights, moveTo, rectOf, reducedMotion, winPulse, type Rect } from './flight';
 
 /** Where each seat sits on the table, and where its discard pile is. */
 const SEAT_AREA: Record<number, string> = { 1: 'right', 2: 'top', 3: 'left' };
@@ -304,10 +304,14 @@ export class View {
         if (element) flash(element, 'indicator-flash');
         return;
       }
-      case 'win':
-        this.root.classList.add('winning');
-        window.setTimeout(() => this.root.classList.remove('winning'), 900);
+      case 'win': {
+        const table = this.root.querySelector<HTMLElement>('.table');
+        if (table) {
+          const animation = winPulse(table);
+          if (animation) this.flights.track(animation);
+        }
         return;
+      }
     }
   }
 

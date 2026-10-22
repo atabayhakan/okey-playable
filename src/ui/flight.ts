@@ -108,8 +108,31 @@ export function flyAway(root: HTMLElement, source: HTMLElement, to: Rect, from?:
   return animation;
 }
 
-/** A short flash on an element: a meld finished, the gösterge was shown. */
-export function flash(element: HTMLElement, className: string, duration = FLASH_MS): void {
+/**
+ * A short flash on an element: a meld finished, the gösterge was shown.
+ * The class comes off when the animation ends, not on a timer: a timer would
+ * keep running while the game is paused, and the animation does not.
+ */
+export function flash(element: HTMLElement, className: string): void {
   element.classList.add(className);
-  window.setTimeout(() => element.classList.remove(className), duration);
+  const done = (event: AnimationEvent) => {
+    if (event.target !== element) return;
+    element.removeEventListener('animationend', done);
+    element.classList.remove(className);
+  };
+  element.addEventListener('animationend', done);
+}
+
+/**
+ * A pulse on the whole table when a hand is won. Tracked like a flight, so a
+ * pause freezes it.
+ */
+export function winPulse(element: HTMLElement, duration = FLASH_MS): Animation | null {
+  return element.animate(
+    [
+      { boxShadow: 'inset 0 0 0 0 rgba(255, 201, 74, 0.7)' },
+      { boxShadow: 'inset 0 0 0 40px rgba(255, 201, 74, 0)' },
+    ],
+    { duration, easing: 'ease-out' },
+  );
 }
