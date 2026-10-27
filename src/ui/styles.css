@@ -649,6 +649,33 @@ details.menu[open] > summary {
   font-weight: 800;
 }
 
+/* Menü: yeni maç düğmesi öne çıksın. */
+.modal .new-match {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  min-height: 48px;
+  border-color: #1f6f4a;
+  background: #1f6f4a;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.modal .new-match:hover {
+  background: #185c3e;
+}
+
+/* Durum çubuğundaki süre. */
+.clock {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ink-faint);
+  padding-right: 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 /* ıstaka: yalnızca dolu yuvalar çizilir, boş kutular gürültü yaratmaz.
    Izgara yarım taşlık tracklerden kurulur: taş iki track, grup arası boşluk bir
    track kaplar. Böylece on beş taş dört yerine üç satıra sığar. */

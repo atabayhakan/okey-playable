@@ -77,8 +77,14 @@ export class Controller {
   discardingId: number | null = null;
   /** The one-time rules card is open. */
   coachOpen = false;
+  /** The menu is open. */
+  menuOpen = false;
   /** What happened on the table, waiting for the view to show it. */
   pendingMotions: Motion[] = [];
+  /** When this hand was dealt, for the clock. */
+  private handStartedAt = performance.now();
+  /** When the game was paused, so the pause does not count as playing time. */
+  private clockFrozen: number | null = null;
   /** The tile the hint points at, if the hint is showing. */
   hintTileId: number | null = null;
   /** The free hint of this hand is spent; the next one costs a rewarded ad. */
@@ -93,8 +99,10 @@ export class Controller {
   singleColor = false;
 
   private readonly listeners = new Set<() => void>();
+  private readonly clockListeners = new Set<() => void>();
   private cancelBot: (() => void) | null = null;
   private cancelNotice: (() => void) | null = null;
+  private cancelClock: (() => void) | null = null;
   private advancing = false;
   private handsSinceAd = 0;
   /** A hand dealt at startup is not in the save yet. */
@@ -137,11 +145,46 @@ export class Controller {
     return () => void this.listeners.delete(listener);
   }
 
+  /**
+   * A tick every second, for the clock on the table. It goes through the
+   * scheduler, so a pause freezes it with everything else.
+   */
+  subscribeClock(listener: () => void): () => void {
+    this.clockListeners.add(listener);
+    return () => void this.clockListeners.delete(listener);
+  }
+
   /** Call once the game is interactive (after gameReady). */
   begin(): void {
     // Save it now, or reloading would deal a different hand.
     if (this.dealtOnLoad) void this.persist();
     this.scheduleBot();
+    this.scheduleClock();
+  }
+
+  /** How long this hand has been running, without the time the game was paused. */
+  get handElapsedMs(): number {
+    const now = this.clockFrozen ?? performance.now();
+    return Math.max(0, now - this.handStartedAt);
+  }
+
+  /** Freezes the clock; the pause should not count as playing time. */
+  pauseClock(): void {
+    this.clockFrozen = performance.now();
+  }
+
+  resumeClock(): void {
+    if (this.clockFrozen === null) return;
+    this.handStartedAt += performance.now() - this.clockFrozen;
+    this.clockFrozen = null;
+  }
+
+  private scheduleClock(): void {
+    this.cancelClock?.();
+    this.cancelClock = this.deps.scheduler.after(1000, () => {
+      for (const listener of this.clockListeners) listener();
+      this.scheduleClock();
+    });
   }
 
   get humanMustDiscard(): boolean {
@@ -329,6 +372,26 @@ export class Controller {
     this.changed();
   }
 
+  /** Opens the menu. */
+  openMenu(): void {
+    this.menuOpen = true;
+    this.changed();
+  }
+
+  closeMenu(): void {
+    this.menuOpen = false;
+    this.changed();
+  }
+
+  /**
+   * Throws the match away and starts from zero: fresh points, a fresh hand.
+   * The save keeps the hand in progress, which is right for a player coming
+   * back — this is the way out when they want a clean start instead.
+   */
+  newMatch(): void {
+    this.dealHand(true);
+  }
+
   /** From the result screen: the next hand, or a new match once someone has hit zero. */
   async nextHand(): Promise<void> {
     if (this.round.phase !== 'roundOver' || this.advancing) return;
@@ -339,29 +402,35 @@ export class Controller {
         // Ads are not guaranteed (region, platform, fill); the game goes on either way.
         await this.deps.platform.requestInterstitialAd().catch(() => undefined);
       }
-      this.cancelBot?.();
-      this.cancelBot = null;
-      if (this.matchOver) this.match = newMatch(this.matchStart);
-      ({ round: this.round, rack: this.rack } = freshRound(nextSeat(this.round.starter)));
-      this.lastPenalties = null;
-      this.selected = null;
-      this.lastDrawn = null;
-      this.hintTileId = null;
-      // A new hand brings a new free hint.
-      this.hintUsedThisHand = false;
-      this.dealing = true;
-      this.clearNotice();
-      void this.persist();
-      this.changed();
-      this.scheduleBot();
-      // The deal is over in a moment; the tiles then sit still.
-      this.deps.scheduler.after(DEAL_ANIM_MS, () => {
-        this.dealing = false;
-        this.changed();
-      });
+      this.dealHand(this.matchOver);
     } finally {
       this.advancing = false;
     }
+  }
+
+  /** Deals a hand; with fresh points it is a whole new match. */
+  private dealHand(freshPoints: boolean): void {
+    this.cancelBot?.();
+    this.cancelBot = null;
+    if (freshPoints) this.match = newMatch(this.matchStart);
+    ({ round: this.round, rack: this.rack } = freshRound(nextSeat(this.round.starter)));
+    this.lastPenalties = null;
+    this.selected = null;
+    this.lastDrawn = null;
+    this.hintTileId = null;
+    // A new hand brings a new free hint.
+    this.hintUsedThisHand = false;
+    this.handStartedAt = performance.now();
+    this.dealing = true;
+    this.clearNotice();
+    void this.persist();
+    this.changed();
+    this.scheduleBot();
+    // The deal is over in a moment; the tiles then sit still.
+    this.deps.scheduler.after(DEAL_ANIM_MS, () => {
+      this.dealing = false;
+      this.changed();
+    });
   }
 
   async persist(): Promise<void> {

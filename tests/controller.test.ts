@@ -158,6 +158,8 @@ describe('motion', () => {
 
   it('shows a meld when a set or a run appears', () => {
     const game = makeController();
+    // A fixed deal, so the leftovers and the okey do not change between runs.
+    game.round = dealRound(42, 0);
     const t = (color: 'red' | 'yellow' | 'blue' | 'black', value: number, id: number) => ({
       id,
       kind: 'number' as const,

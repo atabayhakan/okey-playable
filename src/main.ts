@@ -37,6 +37,9 @@ async function boot(): Promise<void> {
   const game = new Controller({ platform, scheduler, sound }, loaded.save, loaded.ok);
   const view = new View(document.getElementById('app')!, game, strings);
   game.subscribe(() => view.render());
+  // The clock ticks on its own: redrawing the table every second would restart
+  // the animations and cost a full layout.
+  game.subscribeClock(() => view.updateClock());
   // Dev only (stripped from builds): poke at the state from the console.
   if (import.meta.env.DEV) Object.assign(window, { okeyGame: game, okeyView: view });
 
@@ -46,12 +49,14 @@ async function boot(): Promise<void> {
     // A tile in flight has to freeze too, or the table keeps moving while the
     // game is paused.
     view.pauseMotion();
+    game.pauseClock();
     void game.persist();
   });
   platform.onResume(() => {
     scheduler.resume();
     sound.resume();
     view.resumeMotion();
+    game.resumeClock();
   });
 
   view.render();

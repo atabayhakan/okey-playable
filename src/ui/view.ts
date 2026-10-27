@@ -101,10 +101,13 @@ export class View {
     const focusedKey = (document.activeElement as HTMLElement | null)?.dataset?.key;
     const modal = this.game.round.phase === 'roundOver' ? this.resultModal() : null;
     const coach = this.game.coachOpen ? this.coach() : null;
-    this.root.replaceChildren(this.table(), ...(modal ? [modal] : []), ...(coach ? [coach] : []));
+    const menu = this.game.menuOpen ? this.menu() : null;
+    this.root.replaceChildren(this.table(), ...(modal ? [modal] : []), ...(coach ? [coach] : []), ...(menu ? [menu] : []));
     this.fit();
     motions.forEach((motion, index) => this.playMotion(motion, sources[index]));
-    if (coach) {
+    if (menu) {
+      menu.querySelector<HTMLElement>('[data-action="close-menu"]')?.focus({ preventScroll: true });
+    } else if (coach) {
       coach.querySelector<HTMLElement>('[data-action="close-coach"]')?.focus({ preventScroll: true });
     } else if (modal) {
       modal.querySelector<HTMLElement>('[data-action="next-hand"]')?.focus({ preventScroll: true });
@@ -207,6 +210,8 @@ export class View {
         h(
           'div',
           { class: `status${this.game.notice ? ` notice ${this.game.notice.kind}` : ''}`, role: 'status', 'aria-live': 'polite' },
+          // The clock first: how long this hand has been going.
+          h('span', { class: 'clock', title: this.t.clockLabel, 'aria-label': this.t.clockLabel }, this.clockText()),
           h('span', { class: 'status-text' }, this.statusText()),
           // The hint rides along in the status bar: no new button on the table.
           this.game.hintAvailable
@@ -408,6 +413,20 @@ export class View {
     return h('span', { class: 'caption' }, t.indicator);
   }
 
+  /** The hand's clock: minutes and seconds, without the paused time. */
+  private clockText(): string {
+    const seconds = Math.floor(this.game.handElapsedMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return `${minutes}:${String(rest).padStart(2, '0')}`;
+  }
+
+  /** Updates only the clock; the tick must not redraw the whole table. */
+  updateClock(): void {
+    const clock = this.root.querySelector<HTMLElement>('.clock');
+    if (clock) clock.textContent = this.clockText();
+  }
+
   private statusText(): string {
     const { round: r, notice } = this.game;
     const t = this.t;
@@ -464,10 +483,10 @@ export class View {
           h('b', {}, String(this.game.melds.length)),
         ),
       ),
-      // The rules card can be reopened at any time.
-      h('button', { class: 'chip help', 'data-action': 'open-coach', 'data-key': 'open-coach', 'aria-label': t.coachHelp, title: t.coachHelp }, '?'),
+      // The menu: a new match, the settings, the numbers.
+      h('button', { class: 'chip help', 'data-action': 'open-menu', 'data-key': 'open-menu', 'aria-label': t.menuLabel, title: t.menuLabel }, '☰'),
       // While the result is up the hand counter already includes it; show the hand it was.
-      h('div', { class: 'score' }, t.yourPoints(match.points[HUMAN])),
+      h('div', { class: 'score' }, t.yourPoints(match.points[HUMAN], this.game.round.phase === 'roundOver' ? match.hands : match.hands + 1)),
     );
   }
 
@@ -546,11 +565,10 @@ export class View {
     return `${this.t.colors[tile.color]} ${tile.value}${wild ? ` (${this.t.okey})` : ''}`;
   }
 
-  /** The one-time rules card. It can be reopened from the toolbar. */
+  /** The one-time rules card. It can be reopened from the menu. */
   private coach(): HTMLElement {
     const t = this.t;
     const points = [t.coachDraw, t.coachDiscard, t.coachSets, t.coachOkey, t.coachMeld];
-    const levels: Difficulty[] = ['easy', 'normal', 'hard'];
     return h(
       'div',
       { class: 'modal-backdrop' },
@@ -561,85 +579,122 @@ export class View {
           'div',
           { class: 'modal-body' },
           h('h2', { id: 'coach-title' }, t.coachTitle),
-          h(
-            'ul',
-            { class: 'coach-list' },
-            ...points.map((point) => h('li', {}, point)),
-          ),
-          // How sharp the computer opponents are.
-          h(
-            'div',
-            { class: 'difficulty' },
-            h('span', { class: 'label' }, t.difficultyLabel),
-            ...levels.map((level) =>
-              h(
-                'button',
-                {
-                  class: `chip${this.game.difficulty === level ? ' on' : ''}`,
-                  'data-action': 'difficulty',
-                  'data-level': level,
-                  'data-key': `difficulty-${level}`,
-                  'aria-pressed': String(this.game.difficulty === level),
-                },
-                t.difficulty[level],
-              ),
-            ),
-          ),
-          // How long a match runs: it applies to the next match.
-          h(
-            'div',
-            { class: 'difficulty' },
-            h('span', { class: 'label' }, t.matchLengthLabel),
-            ...MATCH_LENGTHS.map(([id, start]) =>
-              h(
-                'button',
-                {
-                  class: `chip${this.game.matchStart === start ? ' on' : ''}`,
-                  'data-action': 'match-length',
-                  'data-start': String(start),
-                  'data-key': `match-${id}`,
-                  'aria-pressed': String(this.game.matchStart === start),
-                },
-                t.matchLength[id],
-              ),
-            ),
-          ),
-          // The colored okey: a red or black indicator makes the okey count double.
-          h(
-            'div',
-            { class: 'difficulty' },
-            h('span', { class: 'label' }, t.coloredOkeyLabel),
-            h(
-              'button',
-              {
-                class: `chip${this.game.coloredOkey ? ' on' : ''}`,
-                'data-action': 'colored-okey',
-                'data-key': 'colored-okey',
-                'aria-pressed': String(this.game.coloredOkey),
-              },
-              this.game.coloredOkey ? t.on : t.off,
-            ),
-          ),
-          // A hand finished with all its tiles in one colour.
-          h(
-            'div',
-            { class: 'difficulty' },
-            h('span', { class: 'label' }, t.singleColorLabel),
-            h(
-              'button',
-              {
-                class: `chip${this.game.singleColor ? ' on' : ''}`,
-                'data-action': 'single-color',
-                'data-key': 'single-color',
-                'aria-pressed': String(this.game.singleColor),
-              },
-              this.game.singleColor ? t.on : t.off,
-            ),
-          ),
+          h('ul', { class: 'coach-list' }, ...points.map((point) => h('li', {}, point))),
+          ...this.settingsSection(),
         ),
         h('button', { class: 'primary', 'data-action': 'close-coach', 'data-key': 'close-coach' }, t.coachStart),
       ),
     );
+  }
+
+  /**
+   * The menu: everything the player reaches for outside a turn. A new match,
+   * the table settings and the running numbers, in one place.
+   */
+  private menu(): HTMLElement {
+    const t = this.t;
+    const { stats } = this.game;
+    return h(
+      'div',
+      { class: 'modal-backdrop' },
+      h(
+        'div',
+        { class: 'modal coach menu', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'menu-title' },
+        h(
+          'div',
+          { class: 'modal-body' },
+          h('h2', { id: 'menu-title' }, t.menu),
+          h(
+            'button',
+            { class: 'chip new-match', 'data-action': 'new-match', 'data-key': 'new-match', title: t.newMatchHint },
+            t.newMatch,
+          ),
+          ...this.settingsSection(),
+          // The running numbers.
+          h('p', { class: 'lifetime' }, t.lifetime(stats.won, stats.played, stats.matchesWon, stats.matchesPlayed)),
+          h('button', { class: 'chip', 'data-action': 'open-coach', 'data-key': 'open-coach' }, t.coachHelp),
+        ),
+        h('button', { class: 'primary', 'data-action': 'close-menu', 'data-key': 'close-menu' }, t.closeMenu),
+      ),
+    );
+  }
+
+  /** The table settings, shared by the rules card and the menu. */
+  private settingsSection(): HTMLElement[] {
+    const t = this.t;
+    const levels: Difficulty[] = ['easy', 'normal', 'hard'];
+    return [
+      // How sharp the computer opponents are.
+      h(
+        'div',
+        { class: 'difficulty' },
+        h('span', { class: 'label' }, t.difficultyLabel),
+        ...levels.map((level) =>
+          h(
+            'button',
+            {
+              class: `chip${this.game.difficulty === level ? ' on' : ''}`,
+              'data-action': 'difficulty',
+              'data-level': level,
+              'data-key': `difficulty-${level}`,
+              'aria-pressed': String(this.game.difficulty === level),
+            },
+            t.difficulty[level],
+          ),
+        ),
+      ),
+      // How long a match runs: it applies to the next match.
+      h(
+        'div',
+        { class: 'difficulty' },
+        h('span', { class: 'label' }, t.matchLengthLabel),
+        ...MATCH_LENGTHS.map(([id, start]) =>
+          h(
+            'button',
+            {
+              class: `chip${this.game.matchStart === start ? ' on' : ''}`,
+              'data-action': 'match-length',
+              'data-start': String(start),
+              'data-key': `match-${id}`,
+              'aria-pressed': String(this.game.matchStart === start),
+            },
+            t.matchLength[id],
+          ),
+        ),
+      ),
+      // The colored okey: a red or black indicator makes the okey count double.
+      h(
+        'div',
+        { class: 'difficulty' },
+        h('span', { class: 'label' }, t.coloredOkeyLabel),
+        h(
+          'button',
+          {
+            class: `chip${this.game.coloredOkey ? ' on' : ''}`,
+            'data-action': 'colored-okey',
+            'data-key': 'colored-okey',
+            'aria-pressed': String(this.game.coloredOkey),
+          },
+          this.game.coloredOkey ? t.on : t.off,
+        ),
+      ),
+      // A hand finished with all its tiles in one colour.
+      h(
+        'div',
+        { class: 'difficulty' },
+        h('span', { class: 'label' }, t.singleColorLabel),
+        h(
+          'button',
+          {
+            class: `chip${this.game.singleColor ? ' on' : ''}`,
+            'data-action': 'single-color',
+            'data-key': 'single-color',
+            'aria-pressed': String(this.game.singleColor),
+          },
+          this.game.singleColor ? t.on : t.off,
+        ),
+      ),
+    ];
   }
 
   private resultModal(): HTMLElement {
@@ -767,7 +822,17 @@ export class View {
       case 'close-coach':
         g.closeCoach();
         break;
+      case 'open-menu':
+        g.openMenu();
+        break;
+      case 'close-menu':
+        g.closeMenu();
+        break;
+      case 'new-match':
+        g.newMatch();
+        break;
       case 'open-coach':
+        g.closeMenu();
         g.openCoach();
         break;
       case 'hint':
