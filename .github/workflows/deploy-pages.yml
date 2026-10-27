@@ -1,8 +1,10 @@
 name: Deploy to GitHub Pages
 
-# The public build of the game, so the Playables portal can be given a link
-# that plays. The bundle itself is uploaded to YouTube from release/, this is
-# only for people who want to try it.
+# The public build of the game, for people who want to try it in a browser. It is
+# the web build (npm run build:web): it keeps the game in the browser, which the
+# Playables build may not. The bundle for YouTube is made from release/ with
+# npm run package; the Playables build still runs here, so a change that breaks
+# its certification checks fails this workflow before anything is published.
 on:
   push:
     branches: [main]
@@ -27,11 +29,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The Playables build: typecheck, bundle limits and the banned-API check.
       - run: npm run build
-      # The assets are relative, so the same build works under /okey-playable/.
+      - run: npm test
+      # What gets published. The assets are relative, so it works under /okey-playable/.
+      - run: npm run build:web
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: dist-web
 
   deploy:
     needs: build

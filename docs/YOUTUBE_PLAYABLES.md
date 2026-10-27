@@ -9,9 +9,12 @@
 - Portal davetle çalışıyor (Private Preview). Oyun yüklenebilmesi için önce bekleme listesine
   başvurmak ve YouTube'dan kabul almak gerekiyor. Bu adım atlanamaz.
 - Başvuru formu senin adına yasal beyan içerdiği için (aşağıda) gönderilmedi; senin onayına bırakıldı.
-- **Oynanabilir bağlantı hazır**: <https://atabayhakan.github.io/okey-playable/> (GitHub Pages,
-  `main` dalına push olunca otomatik). Repo herkese açık; bekleme listesi formunda
-  bağlantı istenirse bu adres verilebilir.
+- **Oynanabilir bağlantılar hazır** (ikisi de YouTube dışında çalışan **web derlemesi**, ilerleme
+  tarayıcıda kayıtlı): <https://atabayhakan.github.io/okey-playable/> (GitHub Pages, `main` dalına
+  push olunca otomatik) ve <https://atabayhakan.itch.io/okey> ([docs/ITCH.md](ITCH.md)). Bekleme listesi
+  formunda bağlantı istenirse bunlardan biri verilebilir. YouTube'a gidecek paket ayrı: `npm run package`.
+- **Form artık erişim istiyor** (23 Ekim 2026): ilgi formu "You need access" gösteriyor; Request access
+  senin adına e-posta göndereceği için basılmadı. Resmî belgeler formu hâlâ tek yol olarak gösteriyor.
 
 ## 1. Bekleme listesi / ilgi formu
 
@@ -38,8 +41,8 @@ Form: <https://docs.google.com/forms/d/e/1FAIpQLSdvdQ0lgIq2369aemj1O6w8R8FwGn9O5
 - **Bundle size:** ~40 KiB total
 - **Developer / publisher:** ULGEN Core (onayla)
 - **Oynanabilir bağlantı istenirse:** <https://atabayhakan.github.io/okey-playable/> —
-  `main` dalına push olunca GitHub Actions otomatik yayınlıyor. Alternatif: itch.io'ya
-  yüklemek.
+  `main` dalına push olunca GitHub Actions web derlemesini otomatik yayınlıyor. Alternatif:
+  <https://atabayhakan.itch.io/okey>.
 
 ## 2. Kabul gelince: portal adımları
 
