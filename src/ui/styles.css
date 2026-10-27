@@ -508,7 +508,9 @@ button.discard:not(:disabled) {
   text-align: center;
   line-height: 1.15;
   padding: 0 4px;
-  white-space: nowrap;
+  /* Küçük ekranda yığın dar: tek satır kalsa etiket ekranın kenarından taşar. Sığmazsa sarılır. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .discard.target .hint span {

@@ -47,7 +47,8 @@ const en = {
   hintLabel: 'Show which tile to throw',
   hintAdLabel: 'Watch a short ad for another hint',
   noAd: 'No ad just now, try again later',
-  hintShown: 'Throw this one',
+  hintShown: (away: number | null) =>
+    away === null ? 'Throw this one' : away === 0 ? 'Throw this one: you win' : `Throw this one: ${away} tile${away === 1 ? '' : 's'} from winning`,
   difficultyLabel: 'Opponents',
   difficulty: { easy: 'Easy', normal: 'Normal', hard: 'Hard' },
   matchLengthLabel: 'Match',
@@ -130,7 +131,7 @@ const tr: Strings = {
   hintLabel: 'Hangi taşı atmalısın göster',
   hintAdLabel: 'Kısa bir reklam izle, yeni ipucu al',
   noAd: 'Şu an reklam yok, sonra tekrar dene',
-  hintShown: 'Şu taşı at',
+  hintShown: (away) => (away === null ? 'Şu taşı at' : away === 0 ? 'Şu taşı at: bitiriyorsun' : `Şu taşı at: kazanmaya ${away} taş kalır`),
   difficultyLabel: 'Rakipler',
   difficulty: { easy: 'Kolay', normal: 'Normal', hard: 'Zor' },
   matchLengthLabel: 'Maç',

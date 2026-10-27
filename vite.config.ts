@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 /** The web build is not inside YouTube: leave out the Playables SDK, it would only be a request to youtube.com. */
 const withoutPlayablesSdk = (mode: string): Plugin => ({
@@ -23,5 +23,7 @@ export default defineConfig(({ mode }) => ({
     // The bot tests play hundreds of hands; on a loaded machine the default
     // five seconds is not enough.
     testTimeout: 30_000,
+    // bench/ is run on its own with `npm run bench:bots`.
+    exclude: [...configDefaults.exclude, 'bench/**'],
   },
 }));

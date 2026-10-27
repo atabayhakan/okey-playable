@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { botPlanDiscard, botWantsDiscard, type Difficulty } from '../src/core/bot';
 import { dealRound, declareWin, discardTile, drawFromPile, takeDiscard, MAX_HAND_TURNS, type RoundState } from '../src/core/game';
 
+/**
+ * How many hands a test plays on a level. The hard bot counts every tile that could still help with a
+ * search per face, so a hand of four hard bots takes seconds: it gets a fifth of the hands. The
+ * statistics are bench/bots.test.ts's job; these tests only guard that the bots behave.
+ */
+const handsFor = (level: Difficulty, n: number): number => (level === 'hard' ? Math.max(4, Math.round(n / 5)) : n);
+
 /** Plays whole rounds with four bots and reports what they did. */
 function play(difficulty: Difficulty, seeds: number): { takes: number; draws: number; rounds: number; wins: number } {
   let takes = 0;
@@ -36,8 +43,8 @@ function play(difficulty: Difficulty, seeds: number): { takes: number; draws: nu
 describe('bot difficulty', () => {
   it('ends every round on every level', () => {
     for (const level of ['easy', 'normal', 'hard'] as Difficulty[]) {
-      const result = play(level, 20);
-      expect(result.rounds).toBe(20);
+      const hands = handsFor(level, 20);
+      expect(play(level, hands).rounds).toBe(hands);
     }
   });
 
@@ -48,7 +55,7 @@ describe('bot difficulty', () => {
     // that runs into it is a bug.
     for (const level of ['easy', 'normal', 'hard'] as Difficulty[]) {
       let longest = 0;
-      for (let seed = 1; seed <= 30; seed++) {
+      for (let seed = 1; seed <= handsFor(level, 30); seed++) {
         const r = dealRound(seed * 7919 + 1, seed % 4);
         let steps = 0;
         while (r.phase !== 'roundOver') {
@@ -70,21 +77,42 @@ describe('bot difficulty', () => {
     }
   });
 
-  it('plays harder on hard than on easy', () => {
-    const easy = play('easy', 30);
-    const hard = play('hard', 30);
-    const easyRate = easy.takes / (easy.takes + easy.draws);
-    const hardRate = hard.takes / (hard.takes + hard.draws);
-    // A sharp opponent grabs the tile in front of it; a clumsy one waits.
-    expect(hardRate).toBeGreaterThan(easyRate);
+  it('plays faster on normal and hard than on easy', () => {
+    // How long a hand lasts, in thrown tiles. bench/bots.test.ts measures it on hundreds of hands:
+    // about 30 on hard, 40 on normal, 65 or more on easy.
+    const length = (level: Difficulty): number => {
+      let total = 0;
+      const hands = handsFor(level, 24);
+      for (let seed = 1; seed <= hands; seed++) {
+        const r = dealRound(seed * 104729 + 3, seed % 4);
+        while (r.phase !== 'roundOver') {
+          const seat = r.turn;
+          if (r.phase === 'draw') {
+            if (botWantsDiscard(r, seat, level)) takeDiscard(r, seat);
+            else drawFromPile(r, seat);
+          } else {
+            const plan = botPlanDiscard(r, seat, level);
+            total++;
+            if (!(plan.win && declareWin(r, seat, plan.tileId))) discardTile(r, seat, plan.tileId);
+          }
+        }
+      }
+      return total / hands;
+    };
+    const easy = length('easy');
+    expect(length('normal')).toBeLessThan(easy * 0.8);
+    expect(length('hard')).toBeLessThan(easy * 0.8);
   });
 
-  it('ends most hands with a winner', () => {
-    // A hand that runs out of tiles without anybody finishing is dull, and
-    // the opponents taking too little is what causes it.
+  it('ends nearly every hand with a winner on hard, and most on the other levels', () => {
+    // A hand that runs out of tiles without anybody finishing is dull. Hard brings a hand together
+    // before the pile is gone almost every time (bench/bots.test.ts: about 98%), normal and easy
+    // usually do (about 85% and 70% with all four seats on that level). So few hands are played that
+    // the limits leave plenty of room: they catch a bot that has stopped finishing, not a few points.
+    const limit: Record<Difficulty, number> = { easy: 0.55, normal: 0.32, hard: 0.3 };
     for (const level of ['easy', 'normal', 'hard'] as Difficulty[]) {
       let drawn = 0;
-      const hands = 30;
+      const hands = handsFor(level, 40);
       for (let seed = 1; seed <= hands; seed++) {
         const r = dealRound(seed * 7919 + 1, seed % 4);
         let steps = 0;
@@ -101,7 +129,7 @@ describe('bot difficulty', () => {
         }
         if (r.winner === null) drawn++;
       }
-      expect(drawn / hands).toBeLessThan(0.4);
+      expect(drawn / hands, level).toBeLessThan(limit[level]);
     }
   });
 

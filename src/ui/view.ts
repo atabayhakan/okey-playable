@@ -479,7 +479,7 @@ export class View {
     if (notice?.kind === 'invalidFinish') return t.invalidFinish;
     if (notice?.kind === 'indicatorShown') return notice.seat === HUMAN ? t.youShowedIndicator : t.indicatorNotice(this.seatName(notice.seat));
     if (notice?.kind === 'noAd') return t.noAd;
-    if (this.game.hintTileId !== null) return t.hintShown;
+    if (this.game.hintTileId !== null) return t.hintShown(this.game.hintAway);
     if (r.turn === HUMAN) {
       if (r.phase === 'draw') return t.drawPrompt;
       // The finish zone only exists while a tile is held, so the prompt follows

@@ -1,4 +1,4 @@
-import { botPlanDiscard, botWantsDiscard, type Difficulty } from '../core/bot';
+import { awayAfterThrow, botPlanDiscard, botWantsDiscard, type Difficulty } from '../core/bot';
 import { meldsInHand } from '../core/hand';
 import {
   canDraw,
@@ -51,10 +51,12 @@ interface Deps {
   platform: Platform;
   scheduler: Scheduler;
   sound: Sound;
+  /** Seed for the first hand dealt, so a deal can be asked for (tests, layout checks); later hands are random. */
+  firstSeed?: number;
 }
 
-function freshRound(starter: number): { round: RoundState; rack: Rack } {
-  const round = dealRound(randomSeed(), starter);
+function freshRound(starter: number, seed: number = randomSeed()): { round: RoundState; rack: Rack } {
+  const round = dealRound(seed, starter);
   // The hand starts grouped by its complete sets and runs, then by colour: the
   // player sees what they have from the first second.
   return { round, rack: arrangeMelds(round.hands[HUMAN], round.okey) };
@@ -133,7 +135,7 @@ export class Controller {
     } else {
       // The player left on the result screen: that hand is already scored, so move on.
       if (isMatchOver(this.match)) this.match = newMatch(this.matchStart);
-      ({ round: this.round, rack: this.rack } = freshRound(save.round ? nextSeat(save.round.starter) : HUMAN));
+      ({ round: this.round, rack: this.rack } = freshRound(save.round ? nextSeat(save.round.starter) : HUMAN, deps.firstSeed));
       this.dealtOnLoad = true;
     }
     // Counted from here on: the hand may already hold a complete set.
@@ -228,8 +230,16 @@ export class Controller {
       }
     }
     this.hintUsedThisHand = true;
-    this.hintTileId = botPlanDiscard(this.round, HUMAN, this.difficulty).tileId;
+    // The hint is the best advice there is, whatever the opponents' level: advice from the
+    // easy bot, which throws a tile at random now and then, would be no help.
+    this.hintTileId = botPlanDiscard(this.round, HUMAN, 'hard').tileId;
     this.changed();
+  }
+
+  /** How many tiles the hand is from winning once the hinted tile is thrown; null while no hint is shown. */
+  get hintAway(): number | null {
+    if (this.hintTileId === null) return null;
+    return awayAfterThrow(this.round.hands[HUMAN], this.hintTileId, this.round.okey);
   }
 
   /** The hint has been used up for this hand. */

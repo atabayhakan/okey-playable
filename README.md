@@ -16,7 +16,12 @@ npm run assets     # store/ altındaki mağaza görsellerini yeniden üretir (Ch
 
 ```bash
 npm run package:web  # web derlemesi (itch.io vb.): SDK yok, kayıt tarayıcıda -> release/okey-web-v<sürüm>.zip
+npm run bench:bots   # botların gücünü ölçer: seviyeler birbirine karşı, eller kaç atışta biter (dakikalar sürer)
+npm run check:layout # web derlemesini 18 ekran boyutunda başsız Chrome/Edge ile tarar: bindirme ve taşma olmamalı
 ```
+
+Botlar ve ölçümleri: [docs/BOTS.md](docs/BOTS.md). `?seed=<sayı>` (yalnızca `npm run dev` ve web derlemesi)
+ilk eli o tohumla dağıtır; yerleşim kontrolü ve hata ayıklama için.
 
 YouTube'a yükleme durumu ve adımları: [docs/YOUTUBE_PLAYABLES.md](docs/YOUTUBE_PLAYABLES.md) ·
 itch.io: [docs/ITCH.md](docs/ITCH.md)
@@ -176,6 +181,8 @@ Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü ge
 - [x] Puanlama ve maç yapısı
 - [x] Tamamlanmış per/seri göstergesi ve "en iyi diz" düzenlemesi
 - [x] Daha güçlü botlar (eli bozan taşı atmamak, per tamamlayan taşı almak)
+- [x] Gerçekten farklı bot seviyeleri: "kazanmaya kaç taş kaldı" ölçüsü, Zor'da kesin "canlı taş" sayımı ([docs/BOTS.md](docs/BOTS.md))
+- [x] Ölçüm altyapısı: bot bench'i, 18 ekran boyutunda yerleşim kontrolü (CI'da), el doğrulayıcısı için bağımsız kaba kuvvet testi
 - [x] Kısa öğretici (kurallar kartı) ve ipucu
 - [x] Animasyonlar (taş dağıtma, atma) ve ayrık sesler
 - [x] Sonsuz el hatası: botlar attıkları taşı geri aldığı için deste hiç boşalmıyordu

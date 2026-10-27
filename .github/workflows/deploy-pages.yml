@@ -34,6 +34,9 @@ jobs:
       - run: npm test
       # What gets published. The assets are relative, so it works under /okey-playable/.
       - run: npm run build:web
+      # The layout at 18 screen sizes, in the Chrome the runner already has: nothing may overlap or
+      # run off the screen.
+      - run: node scripts/layout-check.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-web

@@ -34,7 +34,15 @@ async function boot(): Promise<void> {
   const sound = new Sound(platform.isAudioEnabled());
   platform.onAudioEnabledChange((enabled) => sound.setEnabled(enabled));
 
-  const game = new Controller({ platform, scheduler, sound }, loaded.save, loaded.ok);
+  // `?seed=N` deals that hand first. Only in dev and in the web build: `MODE` is a build-time
+  // constant, so the Playables build does not contain this, and a player there cannot pick their deal.
+  let firstSeed: number | undefined;
+  if (import.meta.env.DEV || import.meta.env.MODE === 'web') {
+    const asked = Number(new URLSearchParams(location.search).get('seed'));
+    if (Number.isInteger(asked) && asked > 0) firstSeed = asked;
+  }
+
+  const game = new Controller({ platform, scheduler, sound, firstSeed }, loaded.save, loaded.ok);
   const view = new View(document.getElementById('app')!, game, strings);
   game.subscribe(() => view.render());
   // The clock ticks on its own: redrawing the table every second would restart
