@@ -1,15 +1,41 @@
-// Zips dist/ into release/okey-playable-v<version>.zip for upload in the Playables
-// Developer Portal (index.html at the root of the archive). No dependencies: a minimal
-// ZIP writer on top of node:zlib. Entries get a fixed timestamp so builds are reproducible.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+// Zips a build into release/ (index.html at the root of the archive). No dependencies: a
+// minimal ZIP writer on top of node:zlib. Entries get a fixed timestamp so builds are
+// reproducible.
+//
+//   node scripts/package.mjs            dist/      -> release/okey-playable-v<version>.zip  (Playables portal)
+//   node scripts/package.mjs web        dist-web/  -> release/okey-web-v<version>.zip       (itch.io and the like)
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateRawSync } from 'node:zlib';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const dist = join(root, 'dist');
+const web = process.argv[2] === 'web';
+const dist = join(root, web ? 'dist-web' : 'dist');
 const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-const out = join(root, 'release', `okey-playable-v${version}.zip`);
+const out = join(root, 'release', `${web ? 'okey-web' : 'okey-playable'}-v${version}.zip`);
+
+if (!existsSync(join(dist, 'index.html'))) {
+  console.error(`${relative(root, dist)}/index.html is missing: build first.`);
+  process.exit(1);
+}
+
+// The two builds must not be mixed up: the web one has no YouTube SDK, the Playables one no localStorage.
+{
+  const html = readFileSync(join(dist, 'index.html'), 'utf8');
+  const code = readdirSync(join(dist, 'assets'))
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => readFileSync(join(dist, 'assets', f), 'utf8'))
+    .join('\n');
+  const problems = [];
+  if (web && html.includes('youtube.com')) problems.push('the web build still loads the YouTube SDK');
+  if (web && !code.includes('okey-save')) problems.push('the web build does not save to the browser');
+  if (!web && code.includes('okey-save')) problems.push('the Playables build contains the browser save');
+  if (problems.length) {
+    console.error(problems.join('\n'));
+    process.exit(1);
+  }
+}
 
 const files = [];
 (function walk(dir) {

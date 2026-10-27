@@ -14,7 +14,12 @@ npm run package    # build + release/okey-playable-v<sürüm>.zip (portala yükl
 npm run assets     # store/ altındaki mağaza görsellerini yeniden üretir (Chrome ister)
 ```
 
-YouTube'a yükleme durumu ve adımları: [docs/YOUTUBE_PLAYABLES.md](docs/YOUTUBE_PLAYABLES.md)
+```bash
+npm run package:web  # web derlemesi (itch.io vb.): SDK yok, kayıt tarayıcıda -> release/okey-web-v<sürüm>.zip
+```
+
+YouTube'a yükleme durumu ve adımları: [docs/YOUTUBE_PLAYABLES.md](docs/YOUTUBE_PLAYABLES.md) ·
+itch.io: [docs/ITCH.md](docs/ITCH.md)
 
 ## Puanlama (klasik "20'den düşme")
 

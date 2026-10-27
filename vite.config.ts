@@ -1,6 +1,15 @@
+import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 
-export default defineConfig({
+/** The web build is not inside YouTube: leave out the Playables SDK, it would only be a request to youtube.com. */
+const withoutPlayablesSdk = (mode: string): Plugin => ({
+  name: 'without-playables-sdk',
+  transformIndexHtml: (html) =>
+    mode === 'web' ? html.replace(/\s*<!--[^>]*Playables SDK[^>]*-->\s*<script src="https:\/\/www\.youtube\.com\/game_api\/v1"><\/script>/, '') : html,
+});
+
+export default defineConfig(({ mode }) => ({
+  plugins: [withoutPlayablesSdk(mode)],
   // Playables are served from a path YouTube chooses, so every asset URL must be relative.
   base: './',
   server: { port: 5180, strictPort: true },
@@ -15,4 +24,4 @@ export default defineConfig({
     // five seconds is not enough.
     testTimeout: 30_000,
   },
-});
+}));

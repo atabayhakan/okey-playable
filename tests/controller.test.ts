@@ -141,9 +141,8 @@ describe('motion', () => {
     // A tile on the pile of the player to the right.
     game.round.discards[(HUMAN + 3) % 4].push(game.round.hands[1][0]);
     game.humanTakeDiscard();
-    expect(game.pendingMotions).toEqual([
-      { kind: 'take', tileId: expect.any(Number), seat: HUMAN, from: (HUMAN + 3) % 4 },
-    ]);
+    // Like a draw, a taken tile can also complete a meld, so only the first motion is about the tile.
+    expect(game.pendingMotions[0]).toEqual({ kind: 'take', tileId: expect.any(Number), seat: HUMAN, from: (HUMAN + 3) % 4 });
   });
 
   it('tells the view where a thrown tile went', () => {

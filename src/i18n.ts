@@ -27,7 +27,7 @@ const en = {
   clearArrange: 'Tidy up',
   arrange: 'Arrange',
   handValue: 'Hand',
-  handValueShort: 'el',
+  handValueShort: 'pts',
   handValueHint: 'What your tiles are worth right now',
   meldHint: 'Complete sets and runs your hand already holds',
   coachTitle: 'How Okey works',

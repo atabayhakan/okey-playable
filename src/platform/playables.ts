@@ -46,13 +46,31 @@ function youtubePlatform(yt: typeof ytgame): Platform {
 }
 
 const MAX_SAVE_BYTES = 3 * 1024 * 1024;
-const DEV_SAVE_KEY = 'okey-dev-save';
+const SAVE_KEY = 'okey-save';
+
+/**
+ * The web build (`vite build --mode web`, for itch.io and the like) runs outside YouTube:
+ * it keeps the save in the browser and picks the language from it. `MODE` is a constant at
+ * build time, so everything behind this flag is removed from the Playables build, where
+ * saving must go only through `saveData` and the language only through `getLanguage`.
+ */
+const WEB = import.meta.env.MODE === 'web';
+
+/** localStorage can throw (private windows, blocked third-party storage): the game then plays without a saved game. */
+function storage(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Local stand-in. Query params: ?lang=tr, ?audio=off.
  * In `npm run dev` it also persists to localStorage and exposes `window.okeyDev`
  * (pause/resume/audio/clearSave). Those branches are stripped from production builds,
- * because Playables must save only through `saveData`.
+ * because Playables must save only through `saveData`. The web build persists too, and also
+ * pauses the game while its tab is hidden.
  */
 function devPlatform(): Platform {
   const params = new URLSearchParams(location.search);
@@ -75,26 +93,37 @@ function devPlatform(): Platform {
           audio = on;
           audioCallbacks.forEach((cb) => cb(on));
         },
-        clearSave: () => localStorage.removeItem(DEV_SAVE_KEY),
+        clearSave: () => localStorage.removeItem(SAVE_KEY),
       },
     });
   }
+
+  if (WEB) {
+    // Nothing else tells the game that nobody is looking: bots would play on in a background tab.
+    document.addEventListener('visibilitychange', () => {
+      (document.hidden ? pauseCallbacks : resumeCallbacks).forEach((cb) => cb());
+    });
+  }
+
+  const persist = import.meta.env.DEV || WEB;
 
   return {
     inPlayables: false,
     firstFrameReady: () => console.info('[playables] firstFrameReady'),
     gameReady: () => console.info('[playables] gameReady'),
     async loadData() {
-      if (import.meta.env.DEV) return localStorage.getItem(DEV_SAVE_KEY) ?? '';
+      if (persist) return storage()?.getItem(SAVE_KEY) ?? memory;
       return memory;
     },
     async saveData(data) {
       if (data.length * 2 > MAX_SAVE_BYTES) throw new Error('Save data exceeds 3 MiB');
       memory = data;
-      if (import.meta.env.DEV) localStorage.setItem(DEV_SAVE_KEY, data);
+      if (persist) storage()?.setItem(SAVE_KEY, data);
     },
     async getLanguage() {
-      return params.get('lang') ?? 'en';
+      const asked = params.get('lang');
+      if (asked) return asked;
+      return WEB ? navigator.language : 'en';
     },
     isAudioEnabled: () => audio,
     onAudioEnabledChange: (cb) => listen(audioCallbacks, cb),
