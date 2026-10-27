@@ -41,6 +41,34 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = {}, ...
 
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
+/**
+ * How the table is laid out for a given amount of room. `chrome` is the height
+ * of everything that is not the table or the rack (toolbar, gaps, padding) and
+ * `statusStrip` the strip the status bar takes above the seats in landscape.
+ * They mirror the CSS: the compact values match the [data-compact] rules.
+ */
+interface FitMode {
+  chrome: number;
+  statusStrip: number;
+  minTile: number;
+  maxTile: number;
+  minBoardWide: number;
+  minBoardTall: number;
+}
+
+interface FitResult {
+  mode: FitMode;
+  tile: number;
+  cols: number;
+  rackH: number;
+}
+
+/** Height of a rack of `rows` rows of tiles `t` px wide: the tiles, the row gaps and the padding. */
+const rackHeight = (t: number, rows: number) => t * (1.38 * rows + 0.08 * (rows - 1) + 0.44);
+
+const ROOMY: FitMode = { chrome: 74, statusStrip: 48, minTile: 30, maxTile: 56, minBoardWide: 185, minBoardTall: 230 };
+const COMPACT: FitMode = { chrome: 52, statusStrip: 40, minTile: 20, maxTile: 40, minBoardWide: 105, minBoardTall: 150 };
+
 interface Drag {
   tileId: number;
   pointerId: number;
@@ -136,38 +164,53 @@ export class View {
     const avail = width - 16;
     const tracks = this.rackTracks();
     const wide = width > height;
-    const minBoard = wide ? 185 : 230;
 
-    let tile = 0;
-    let cols = 0;
-    let rackH = 0;
-    for (let t = 56; t >= 30; t -= 1) {
-      const c = 2 * Math.floor((avail / t - 0.52) / 1.04);
-      if (c < 8) continue;
-      const rows = Math.ceil(tracks / c);
-      const h = t * (1.38 * rows + 0.08 * (rows - 1) + 0.44);
-      if (height - h - 74 < minBoard) continue;
-      tile = t;
-      cols = c;
-      rackH = h;
-      break;
-    }
-    if (!tile) {
-      tile = 30;
-      cols = 8;
-      const rows = Math.ceil(tracks / cols);
-      rackH = tile * (1.38 * rows + 0.08 * (rows - 1) + 0.44);
-    }
+    // The roomy layout first; when the screen is too short for it, the compact
+    // one (thinner buttons, tighter spacing, smaller tiles) so nothing overlaps.
+    const layout = this.fitRack(avail, height, tracks, wide, ROOMY) ?? this.fitCompactRack(avail, height, tracks, wide);
+    const mode = layout.mode;
+    const { tile, cols, rackH } = layout;
 
-    const boardH = height - rackH - 74;
+    // The table's own height: what is left after the rack and the fixed rows.
+    const boardH = height - rackH - mode.chrome;
+    // In landscape the status bar sits above the seats and needs its own strip.
+    // 33 = the two rows' text lines (name, points, the indicator caption) and the row gaps.
+    const extra = wide ? mode.statusStrip + 33 : 80;
     // The table tiles follow the room the table actually has.
-    const btw = clamp(Math.floor((boardH - (wide ? 55 : 80)) / (wide ? 2.9 : 4.31)), 16, 64);
+    const btw = clamp(Math.floor((boardH - extra) / (wide ? 2.9 : 4.31)), mode === COMPACT ? 14 : 16, 64);
     const rackW = Math.floor(cols * 0.52 * tile + 0.52 * tile);
 
     this.root.style.setProperty('--tile-w', `${tile}px`);
     this.root.style.setProperty('--btw', `${btw}px`);
     this.root.style.setProperty('--cols', String(cols));
     this.root.style.setProperty('--rack-w', `${rackW}px`);
+    this.root.toggleAttribute('data-compact', mode === COMPACT);
+  }
+
+  /** The biggest tile for which both the rack and the table fit in `mode`, or null if none does. */
+  private fitRack(avail: number, height: number, tracks: number, wide: boolean, mode: FitMode): FitResult | null {
+    const minBoard = wide ? mode.minBoardWide : mode.minBoardTall;
+    for (let t = mode.maxTile; t >= mode.minTile; t -= 1) {
+      const cols = 2 * Math.floor((avail / t - 0.52) / 1.04);
+      if (cols < 8) continue;
+      const rackH = rackHeight(t, Math.ceil(tracks / cols));
+      if (height - rackH - mode.chrome < minBoard) continue;
+      return { mode, tile: t, cols, rackH };
+    }
+    return null;
+  }
+
+  /**
+   * The compact layout always answers: when even its smallest tile leaves the
+   * table short of its minimum, that tile is used anyway. A very small screen
+   * gets a readable, tight table rather than none.
+   */
+  private fitCompactRack(avail: number, height: number, tracks: number, wide: boolean): FitResult {
+    const fitted = this.fitRack(avail, height, tracks, wide, COMPACT);
+    if (fitted) return fitted;
+    const tile = COMPACT.minTile;
+    const cols = Math.max(8, 2 * Math.floor((avail / tile - 0.52) / 1.04));
+    return { mode: COMPACT, tile, cols, rackH: rackHeight(tile, Math.ceil(tracks / cols)) };
   }
 
   /**
@@ -212,7 +255,8 @@ export class View {
           { class: `status${this.game.notice ? ` notice ${this.game.notice.kind}` : ''}`, role: 'status', 'aria-live': 'polite' },
           // The clock first: how long this hand has been going.
           h('span', { class: 'clock', title: this.t.clockLabel, 'aria-label': this.t.clockLabel }, this.clockText()),
-          h('span', { class: 'status-text' }, this.statusText()),
+          // The title keeps the full text reachable when a narrow bar has to cut it.
+          h('span', { class: 'status-text', title: this.statusText() }, this.statusText()),
           // The hint rides along in the status bar: no new button on the table.
           this.game.hintAvailable
             ? h(
@@ -392,7 +436,8 @@ export class View {
         h('span', { class: 'tile back' }),
         h('span', { class: 'pile-count' }, String(r.pile.length)),
       ),
-      h('div', { class: 'indicator' }, this.tile(r.indicator), this.indicatorCaption()),
+      // With the Show button the caption becomes a tall tap target; landscape puts it beside the tile.
+      h('div', { class: `indicator${canShowIndicator(r, HUMAN) ? ' has-action' : ''}` }, this.tile(r.indicator), this.indicatorCaption()),
       canTryFinish
         ? h('button', { class: 'finish target', 'data-action': 'finish', 'data-drop': 'finish', 'data-key': 'finish' }, t.finish)
         : null,
