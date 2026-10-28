@@ -18,6 +18,7 @@ npm run assets     # store/ altındaki mağaza görsellerini yeniden üretir (Ch
 npm run package:web  # web derlemesi (itch.io vb.): SDK yok, kayıt tarayıcıda -> release/okey-web-v<sürüm>.zip
 npm run bench:bots   # botların gücünü ölçer: seviyeler birbirine karşı, eller kaç atışta biter (dakikalar sürer)
 npm run check:layout # web derlemesini 18 ekran boyutunda başsız Chrome/Edge ile tarar: bindirme ve taşma olmamalı
+                     # (bir de geniş yazı tipi turu; CI'da `--no-stress` ile yalnızca normal tur)
 ```
 
 Botlar ve ölçümleri: [docs/BOTS.md](docs/BOTS.md). `?seed=<sayı>` (yalnızca `npm run dev` ve web derlemesi)
