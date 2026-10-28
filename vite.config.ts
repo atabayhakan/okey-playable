@@ -20,9 +20,9 @@ export default defineConfig(({ mode }) => ({
     modulePreload: { polyfill: false },
   },
   test: {
-    // The bot tests play hundreds of hands; on a loaded machine the default
-    // five seconds is not enough.
-    testTimeout: 30_000,
+    // The bot tests play whole hands, and the hard bot searches a lot: on a loaded machine (or a CI
+    // runner) the default five seconds is far too little, and thirty was not enough either.
+    testTimeout: 120_000,
     // bench/ is run on its own with `npm run bench:bots`.
     exclude: [...configDefaults.exclude, 'bench/**'],
   },

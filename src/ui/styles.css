@@ -448,6 +448,13 @@ button:focus-visible {
   [data-compact] .status {
     max-width: calc(100% - (100% - var(--btw) * 0.4) / 3.8 - var(--btw) - 22px);
   }
+
+  /* Rahat düzende de aynı: çubuk yazıya göre genişler ve geniş bir yazı tipinde (CI'daki Linux yazı
+     tipleri) iki yığının arasındaki boşluğu 1-2 px aşıp köşelerine değiyordu. Pay daha küçük (16 px),
+     çünkü yazı iki satıra kadar sarılabilir. */
+  #app:not([data-compact]) .status {
+    max-width: min(420px, calc(100% - (100% - var(--btw) * 0.4) / 3.8 - var(--btw) - 16px));
+  }
 }
 
 /* ---- Discards, pile, indicator, finish ------------------------------------ */

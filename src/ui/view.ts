@@ -63,6 +63,25 @@ interface FitResult {
   rackH: number;
 }
 
+/**
+ * How many rows a grid of `cols` tracks needs for these items, placed the way CSS grid places them: in
+ * order, and an item that does not fit in what is left of a row starts the next one. Dividing the tracks
+ * by the columns is not enough: a two-track tile that finds one track left on a row leaves it empty, and
+ * the rack comes out a row taller than that sum says.
+ */
+const rowsFor = (items: readonly number[], cols: number): number => {
+  let rows = 1;
+  let used = 0;
+  for (const span of items) {
+    if (used + span > cols) {
+      rows++;
+      used = 0;
+    }
+    used += span;
+  }
+  return rows;
+};
+
 /** Height of a rack of `rows` rows of tiles `t` px wide: the tiles, the row gaps and the padding. */
 const rackHeight = (t: number, rows: number) => t * (1.38 * rows + 0.08 * (rows - 1) + 0.44);
 
@@ -162,12 +181,12 @@ export class View {
     const height = this.root.clientHeight;
     if (!width || !height) return;
     const avail = width - 16;
-    const tracks = this.rackTracks();
+    const items = this.rackItems();
     const wide = width > height;
 
     // The roomy layout first; when the screen is too short for it, the compact
     // one (thinner buttons, tighter spacing, smaller tiles) so nothing overlaps.
-    const layout = this.fitRack(avail, height, tracks, wide, ROOMY) ?? this.fitCompactRack(avail, height, tracks, wide);
+    const layout = this.fitRack(avail, height, items, wide, ROOMY) ?? this.fitCompactRack(avail, height, items, wide);
     const mode = layout.mode;
     const { tile, cols, rackH } = layout;
 
@@ -188,12 +207,12 @@ export class View {
   }
 
   /** The biggest tile for which both the rack and the table fit in `mode`, or null if none does. */
-  private fitRack(avail: number, height: number, tracks: number, wide: boolean, mode: FitMode): FitResult | null {
+  private fitRack(avail: number, height: number, items: number[], wide: boolean, mode: FitMode): FitResult | null {
     const minBoard = wide ? mode.minBoardWide : mode.minBoardTall;
     for (let t = mode.maxTile; t >= mode.minTile; t -= 1) {
       const cols = 2 * Math.floor((avail / t - 0.52) / 1.04);
       if (cols < 8) continue;
-      const rackH = rackHeight(t, Math.ceil(tracks / cols));
+      const rackH = rackHeight(t, rowsFor(items, cols));
       if (height - rackH - mode.chrome < minBoard) continue;
       return { mode, tile: t, cols, rackH };
     }
@@ -205,24 +224,26 @@ export class View {
    * table short of its minimum, that tile is used anyway. A very small screen
    * gets a readable, tight table rather than none.
    */
-  private fitCompactRack(avail: number, height: number, tracks: number, wide: boolean): FitResult {
-    const fitted = this.fitRack(avail, height, tracks, wide, COMPACT);
+  private fitCompactRack(avail: number, height: number, items: number[], wide: boolean): FitResult {
+    const fitted = this.fitRack(avail, height, items, wide, COMPACT);
     if (fitted) return fitted;
     const tile = COMPACT.minTile;
     const cols = Math.max(8, 2 * Math.floor((avail / tile - 0.52) / 1.04));
-    return { mode: COMPACT, tile, cols, rackH: rackHeight(tile, Math.ceil(tracks / cols)) };
+    return { mode: COMPACT, tile, cols, rackH: rackHeight(tile, rowsFor(items, cols)) };
   }
 
   /**
-   * Grid tracks the rack uses: two for a tile, one for the gap between two
-   * groups. The empty tail of the rack is trimmed, so a hand that fits on two
-   * rows does not reserve three.
+   * What the rack puts in its grid, in order, as the tracks each takes: two for a
+   * tile or a free slot, one for the gap between two groups. The empty tail of the
+   * rack is trimmed, so a hand that fits on two rows does not reserve three. A tile
+   * of the hand that is not on the rack is drawn after the rest.
    */
-  private rackTracks(): number {
+  private rackItems(): number[] {
     const rack = this.game.rack;
-    let tracks = 0;
-    for (let i = 0; i < this.rackSlots(); i++) tracks += rack[i] === GROUP_BREAK ? 1 : 2;
-    return tracks;
+    const items: number[] = [];
+    for (let i = 0; i < this.rackSlots(); i++) items.push(rack[i] === GROUP_BREAK ? 1 : 2);
+    for (const tile of this.game.round.hands[HUMAN]) if (!rack.includes(tile.id)) items.push(2);
+    return items;
   }
 
   /** Slots the rack actually uses, with the empty tail trimmed off. */

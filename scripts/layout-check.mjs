@@ -56,6 +56,12 @@ const DRAW_STATE_SIZES = new Set(['280x320', '360x640', '390x844', '420x247', '5
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const server = createServer((req, res) => {
+  // A page of the same origin that does not run the game: where the saved game is cleared, so that no
+  // game that is still running can write its save back after it.
+  if (req.url === '/blank') {
+    res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>blank</title>');
+    return;
+  }
   const path = join(webDir, req.url === '/' || req.url?.startsWith('/?') ? 'index.html' : (req.url ?? '').split('?')[0]);
   if (!path.startsWith(webDir) || !existsSync(path)) {
     res.writeHead(404).end();
@@ -75,6 +81,11 @@ const chrome = spawn(
     '--no-sandbox',
     '--hide-scrollbars',
     '--no-first-run',
+    // A headless page that has been navigated a lot is treated as a background one, and its timers (the
+    // bots' waits among them) are slowed down: a check that is slow and flaky for no reason of the game's.
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${mkdtempSync(join(tmpdir(), 'okey-layout-'))}`,
     'about:blank',
@@ -110,8 +121,10 @@ await new Promise((res, rej) => {
 let nextId = 0;
 const pending = new Map();
 const waiting = new Map();
+let crashed = false;
 ws.addEventListener('message', (ev) => {
   const msg = JSON.parse(ev.data);
+  if (msg.method === 'Inspector.targetCrashed') crashed = true;
   if (msg.id && pending.has(msg.id)) {
     const { resolve, reject, method } = pending.get(msg.id);
     pending.delete(msg.id);
@@ -127,14 +140,38 @@ const send = (method, params = {}) =>
     ws.send(JSON.stringify({ id, method, params }));
   });
 const once = (method) => new Promise((resolve) => waiting.set(method, [...(waiting.get(method) ?? []), resolve]));
+/** Runs code in the page. A page that does not answer in a minute is hung: that is a failure, not a wait. */
 const evaluate = async (expression) => {
-  const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  const answer = send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  let timeout;
+  const timer = new Promise((_, reject) => {
+    timeout = setTimeout(async () => {
+      // Stop the page where it is and say where that is: a hung page is a bug worth finding.
+      let where = '';
+      try {
+        const paused = once('Debugger.paused');
+        await send('Debugger.enable');
+        await send('Debugger.pause');
+        const stop = await Promise.race([paused, new Promise((r) => setTimeout(r, 5000, null))]);
+        where = stop ? '\n  ' + stop.callFrames.slice(0, 8).map((f) => `${f.functionName || '(anonymous)'} ${f.url.split('/').pop()}:${f.location.lineNumber + 1}`).join('\n  ') : ' (it could not be paused)';
+      } catch {
+        where = ' (no stack)';
+      }
+      reject(new Error(`the page did not answer in 60 s; running ${expression.slice(0, 60).replace(/\s+/g, ' ')}...${where}`));
+    }, 60_000);
+  });
+  const r = await Promise.race([answer, timer]).finally(() => clearTimeout(timeout));
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'evaluate failed');
   return r.result.value;
 };
 
 await send('Page.enable');
 await send('Runtime.enable');
+await send('Inspector.enable');
+// A headless page that has been navigated a lot ends up "hidden": requestAnimationFrame stops (the game
+// waits for a frame to start) and the web build pauses itself, as it should for a hidden tab. Keep it visible.
+await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+await send('Page.bringToFront');
 
 /**
  * In the page: which parts of the table overlap, run off the screen, or make the page wider than
@@ -153,15 +190,23 @@ const PROBE = `(() => {
       const a = rects[i][1], b = rects[j][1];
       const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
       const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-      if (w > 1 && h > 1) overlaps.push(rects[i][0] + ' x ' + rects[j][0] + ' (' + Math.round(w) + 'x' + Math.round(h) + ')');
+      const box = (r) => '[' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(',') + ']';
+      if (w > 1 && h > 1) overlaps.push(rects[i][0] + box(a) + ' x ' + rects[j][0] + box(b) + ' (' + Math.round(w) + 'x' + Math.round(h) + ')');
     }
   }
   const off = rects
     .filter(([, r]) => r.right > innerWidth + 1 || r.bottom > innerHeight + 1 || r.left < -1 || r.top < -1)
     .map(([s]) => s);
   const tile = parseFloat(getComputedStyle(document.getElementById('app')).getPropertyValue('--tile-w'));
+  // For a failure: where the board and what is in it are, to see which part is taller than its room.
+  const board = overlaps.length || off.length
+    ? [...document.querySelectorAll('.table, .board, .board > *, .seat.top > *, .center > *, .toolbar, .rack')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return (e.className || e.tagName) + '[' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(',') + ']';
+      }).concat(['--tile-w=' + getComputedStyle(document.getElementById('app')).getPropertyValue('--tile-w'), '--btw=' + getComputedStyle(document.getElementById('app')).getPropertyValue('--btw'), 'compact=' + document.getElementById('app').hasAttribute('data-compact'), 'rack tiles=' + document.querySelectorAll('.rack [data-tile-id]').length, '--cols=' + getComputedStyle(document.getElementById('app')).getPropertyValue('--cols'), 'rack rows=' + getComputedStyle(document.querySelector('.rack')).gridTemplateRows.split(' ').length, 'rack items=' + [...document.querySelectorAll('.rack > *')].map((e) => e.className.includes('gap') ? 'g' : e.className.includes('empty') ? 'e' : 't').join('')])
+    : [];
   return {
-    overlaps, off,
+    overlaps, off, board,
     sideways: document.documentElement.scrollWidth > innerWidth + 1,
     tile,
     ready: Boolean(document.querySelector('.table')),
@@ -187,49 +232,76 @@ const PLAY_TO_DRAW = `(async () => {
 const failures = [];
 const note = (size, state, problem) => failures.push(`${size} ${state}: ${problem}`);
 
-for (const [width, height] of SIZES) {
-  const size = `${width}x${height}`;
-  await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-  await send('Page.navigate', { url: 'about:blank' });
-  let loaded = once('Page.loadEventFired');
-  await send('Page.navigate', { url: `${base}?lang=en&seed=${SEED_WITH_TWIN}` });
-  await loaded;
-  // A clean save, so the seeded deal is the one that appears.
-  await evaluate('localStorage.clear()');
-  loaded = once('Page.loadEventFired');
-  await send('Page.reload');
-  await loaded;
-  for (let t = 0; t < 40 && !(await evaluate(`Boolean(document.querySelector('.table'))`)); t++) await sleep(150);
-  await evaluate(`document.querySelector('[data-action="close-coach"]')?.click()`);
-  await sleep(500);
+/**
+ * A wider font, to stand in for the fonts of other systems: the same layout has to hold when the text
+ * is a few percent wider than on the machine it was made on (the Linux runner of the CI has wider ones
+ * than Windows: the first run there found overlaps this machine did not show).
+ */
+const WIDE_FONT_CSS = `* { letter-spacing: ${process.env.LAYOUT_SPACING ?? '0.07'}em !important; }`;
 
-  const check = (state, probe) => {
-    if (!probe.ready) return note(size, state, 'the table did not appear');
-    if (probe.overlaps.length) note(size, state, `overlaps: ${probe.overlaps.join(', ')}`);
-    if (probe.off.length) note(size, state, `off the screen: ${probe.off.join(', ')}`);
-    if (probe.sideways) note(size, state, 'the page scrolls sideways');
-    if (probe.tile < 20) note(size, state, `tiles are ${probe.tile}px, below the 20px floor`);
-  };
+const PASSES = [
+  { name: '', css: null, sizes: SIZES },
+  { name: 'wide font ', css: WIDE_FONT_CSS, sizes: SIZES.filter(([w, h]) => DRAW_STATE_SIZES.has(`${w}x${h}`) || w === 320 || w === 340) },
+]
+  // LAYOUT_ONLY="568x320" (and "wide" for the wide-font pass) checks one size, to look into a failure.
+  .map((pass) => ({ ...pass, sizes: pass.sizes.filter(([w, h]) => !process.env.LAYOUT_ONLY || `${w}x${h}` === process.env.LAYOUT_ONLY) }))
+  .filter((pass) => !process.env.LAYOUT_PASS || (process.env.LAYOUT_PASS === 'wide') === Boolean(pass.css));
 
-  const opening = await evaluate(PROBE);
-  check('opening', opening);
-  if (!opening.show) note(size, 'opening', 'the Show button is missing: the seeded deal is not the one expected');
+for (const pass of PASSES) {
+  for (const [width, height] of SIZES.filter((s) => pass.sizes.includes(s))) {
+    const size = `${pass.name}${width}x${height}`;
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    await send('Page.bringToFront');
+    // The saved game is cleared on a page that does not run the game: on the game's own page, the game
+    // that is still running would write its save back after the clear (the CI runner is slow enough to show it).
+    let loaded = once('Page.loadEventFired');
+    await send('Page.navigate', { url: `${base}blank` });
+    await loaded;
+    await evaluate('localStorage.clear()');
+    loaded = once('Page.loadEventFired');
+    await send('Page.navigate', { url: `${base}?lang=en&seed=${SEED_WITH_TWIN}` });
+    await loaded;
+    for (let t = 0; t < 60 && !(await evaluate(`Boolean(document.querySelector('.table'))`)); t++) await sleep(150);
+    // Say so if the page is hidden anyway: that explains a table that never appears, or bots that never move.
+    if (await evaluate('document.hidden')) note(size, 'page', 'the browser page is hidden (the check cannot run)');
+    if (pass.css) await evaluate(`document.head.appendChild(Object.assign(document.createElement('style'), { textContent: ${JSON.stringify(pass.css)} }))`);
+    await evaluate(`document.querySelector('[data-action="close-coach"]')?.click()`);
+    await sleep(500);
 
-  // The hint puts a longer text in the status bar ("Throw this one: 2 tiles from winning").
-  if (await evaluate(`Boolean(document.querySelector('[data-action="hint"]'))`)) {
-    await evaluate(`document.querySelector('[data-action="hint"]').click()`);
-    await sleep(300);
-    check('hint', await evaluate(PROBE));
-  } else {
-    note(size, 'hint', 'the hint button is missing in the opening hand');
+    const check = (state, probe) => {
+      if (!probe.ready) return note(size, state, 'the table did not appear');
+      if (probe.overlaps.length) note(size, state, `overlaps: ${probe.overlaps.join(', ')}\n    board: ${probe.board.join(' ')}`);
+      if (probe.off.length) note(size, state, `off the screen: ${probe.off.join(', ')}\n    board: ${probe.board.join(' ')}`);
+      if (probe.sideways) note(size, state, 'the page scrolls sideways');
+      if (probe.tile < 20) note(size, state, `tiles are ${probe.tile}px, below the 20px floor`);
+    };
+
+    const opening = await evaluate(PROBE);
+    check('opening', opening);
+    if (!opening.show) note(size, 'opening', 'the Show button is missing: the seeded deal is not the one expected');
+
+    // The hint puts a longer text in the status bar ("Throw this one: 2 tiles from winning").
+    if (await evaluate(`Boolean(document.querySelector('[data-action="hint"]'))`)) {
+      await evaluate(`document.querySelector('[data-action="hint"]').click()`);
+      await sleep(300);
+      check('hint', await evaluate(PROBE));
+    } else {
+      note(size, 'hint', 'the hint button is missing in the opening hand');
+    }
+
+    if (DRAW_STATE_SIZES.has(`${width}x${height}`)) {
+      const reached = await evaluate(PLAY_TO_DRAW);
+      // A bot may finish the hand before it is the player's turn again: the result dialog is up, nothing to probe.
+      const handOver = await evaluate(`Boolean(document.querySelector('.modal'))`);
+      if (reached) check('draw', await evaluate(PROBE));
+      else if (!handOver) note(size, 'draw', 'the bots never gave the turn back');
+    }
+    if (crashed) {
+      note(size, 'crash', 'the page crashed');
+      break;
+    }
+    console.log(`${size.padEnd(19)} ${failures.some((f) => f.startsWith(size + ' ')) ? 'FAIL' : 'ok'}`);
   }
-
-  if (DRAW_STATE_SIZES.has(size)) {
-    const reached = await evaluate(PLAY_TO_DRAW);
-    if (!reached) note(size, 'draw', 'the bots never gave the turn back');
-    else check('draw', await evaluate(PROBE));
-  }
-  console.log(`${size.padEnd(9)} ${failures.some((f) => f.startsWith(size + ' ')) ? 'FAIL' : 'ok'}`);
 }
 
 ws.close();
@@ -238,5 +310,5 @@ if (failures.length) {
   for (const f of failures) console.error(`  ${f}`);
   finish(1);
 }
-console.log(`\nLayout ok at ${SIZES.length} sizes.`);
+console.log(`\nLayout ok at ${SIZES.length} sizes, and with a wider font.`);
 finish(0);
