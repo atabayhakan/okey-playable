@@ -51,6 +51,12 @@ const en = {
     away === null ? 'Throw this one' : away === 0 ? 'Throw this one: you win' : `Throw this one: ${away} tile${away === 1 ? '' : 's'} from winning`,
   difficultyLabel: 'Opponents',
   difficulty: { easy: 'Easy', normal: 'Normal', hard: 'Hard' },
+  // The first-hand guide: the status bar leaves about 70 px on the narrowest phone (two lines of
+  // a dozen characters), so each step is a few short words and carries no step counter.
+  tourPick: 'Tap a tile to pick it',
+  tourDrop: 'Tap Discard here',
+  tourDraw: 'Draw from the pile',
+  tourGoal: 'Make sets and runs',
   dailyPlay: 'Daily deal',
   dailyContinue: 'Continue the daily deal',
   dailyDoneWon: 'Daily deal: won today ✓',
@@ -161,6 +167,10 @@ const tr: Strings = {
   hintShown: (away) => (away === null ? 'Şu taşı at' : away === 0 ? 'Şu taşı at: bitiriyorsun' : `Şu taşı at: kazanmaya ${away} taş kalır`),
   difficultyLabel: 'Rakipler',
   difficulty: { easy: 'Kolay', normal: 'Normal', hard: 'Zor' },
+  tourPick: 'Bir taşa dokunup seç',
+  tourDrop: 'Buraya at’a dokun',
+  tourDraw: 'Ortadan taş çek',
+  tourGoal: 'Per ve seri yap',
   dailyPlay: 'Günün eli',
   dailyContinue: 'Günün eline devam et',
   dailyDoneWon: 'Günün eli: bugün kazandın ✓',

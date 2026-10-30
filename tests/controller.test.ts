@@ -219,6 +219,93 @@ describe('statistics', () => {
   });
 });
 
+describe('the first-hand guide', () => {
+  /** A new player: the guide starts at its first step, on a hand the player opens. */
+  const newPlayer = (today = 20261030) => {
+    const game = new Controller(
+      { platform: platform(), scheduler: new Scheduler(), sound: new Sound(false), today: () => today },
+      emptySave(),
+      true,
+    );
+    game.round = dealRound(5, HUMAN);
+    return game;
+  };
+
+  it('starts for a new player and not for one who has read the rules before', () => {
+    expect(newPlayer().tour).toBe(0);
+    expect(makeController({ ...emptySave(), tutorial: 3 }).tour).toBeNull();
+    // A v8 save of a player who closed the rules card has no guide to show.
+    const { tutorial: _t, ...v8 } = { ...emptySave(), v: 8, coachSeen: true };
+    expect(makeController(parseSave(JSON.stringify(v8))).tour).toBeNull();
+    const { tutorial: _u, ...fresh } = { ...emptySave(), v: 8, coachSeen: false };
+    expect(makeController(parseSave(JSON.stringify(fresh))).tour).toBe(0);
+  });
+
+  it('moves on as the player throws, draws and throws again, then ends', () => {
+    const game = newPlayer();
+    game.humanDiscard(game.round.hands[HUMAN][0].id);
+    expect(game.tour).toBe(1);
+    // A bot's turns in between change nothing; the player's draw is the next step.
+    game.round.turn = HUMAN;
+    game.round.phase = 'draw';
+    game.humanDraw();
+    expect(game.tour).toBe(2);
+    game.humanDiscard(game.round.hands[HUMAN][0].id);
+    expect(game.tour).toBeNull();
+  });
+
+  it('takes a tile from the left as well as a draw from the pile', () => {
+    const game = newPlayer();
+    game.humanDiscard(game.round.hands[HUMAN][0].id);
+    game.round.turn = HUMAN;
+    game.round.phase = 'draw';
+    game.round.discards[(HUMAN + 3) % 4].push(game.round.hands[1][0]);
+    game.humanTakeDiscard();
+    expect(game.tour).toBe(2);
+  });
+
+  it('keeps its place in the save', () => {
+    const saves: string[] = [];
+    const game = new Controller(
+      { platform: { ...platform(), saveData: (raw) => (saves.push(raw), Promise.resolve()) }, scheduler: new Scheduler(), sound: new Sound(false) },
+      emptySave(),
+      true,
+    );
+    game.round = dealRound(5, HUMAN);
+    game.humanDiscard(game.round.hands[HUMAN][0].id);
+    void game.persist();
+    expect(makeController(parseSave(saves.at(-1)!)).tour).toBe(1);
+  });
+
+  it('ends when the hand ends, however far it had got', () => {
+    const game = newPlayer();
+    game.round.phase = 'roundOver';
+    game.round.winner = 2;
+    game['finishRound']();
+    expect(game.tour).toBeNull();
+    // ...and a guide that ended does not come back with the next hand.
+    expect(makeController(parseSave(serializeSave({ ...emptySave(), tutorial: 3 }))).tour).toBeNull();
+  });
+
+  it('does not run in the daily deal, and the daily deal does not advance it', () => {
+    const game = newPlayer();
+    game.round = dealRound(5, HUMAN);
+    game.startDaily();
+    expect(game.dailyActive).toBe(true);
+    expect(game.tour).toBeNull();
+    game.humanDiscard(game.round.hands[HUMAN][0].id);
+    game.round.phase = 'roundOver';
+    game.round.winner = 2;
+    game['finishRound']();
+    // Back in the match hand the guide is where it was.
+    void game.nextHand();
+    return Promise.resolve().then(() => {
+      expect(game.dailyActive).toBe(false);
+      expect(game.tour).toBe(0);
+    });
+  });
+});
+
 describe('motion', () => {
   it('tells the view where a drawn tile came from', () => {
     const game = makeController();

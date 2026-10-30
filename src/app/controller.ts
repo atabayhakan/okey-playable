@@ -32,7 +32,7 @@ import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
 import type { Motion } from './motion';
 import { arrangeMelds, arrangePairs, arrangeRuns, compactRack, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
-import { SAVE_VERSION, serializeSave, type BotPace, type DailyStats, type ParkedHand, type SaveData, type Stats } from './save';
+import { SAVE_VERSION, serializeSave, TUTORIAL_DONE, type BotPace, type DailyStats, type ParkedHand, type SaveData, type Stats } from './save';
 import type { Scheduler } from './scheduler';
 import type { Sound } from './sound';
 
@@ -128,6 +128,8 @@ export class Controller {
   dailyDate: number | null = null;
   /** The match hand set aside while the daily deal is played. */
   private parked: ParkedHand | null = null;
+  /** How far the first-hand guide has got; see `tour`. */
+  private tutorial: number;
 
   private readonly listeners = new Set<() => void>();
   private readonly clockListeners = new Set<() => void>();
@@ -158,6 +160,7 @@ export class Controller {
     this.singleColor = save.singleColor;
     this.botPace = save.botPace;
     this.daily = { ...save.daily };
+    this.tutorial = save.tutorial;
     // A new player gets the rules card over their first hand.
     this.coachOpen = !save.coachSeen;
 
@@ -305,6 +308,7 @@ export class Controller {
   humanDraw(): void {
     if (!canDraw(this.round, HUMAN)) return;
     const tile = drawFromPile(this.round, HUMAN);
+    this.tourAfter('draw');
     this.receive(tile, { kind: 'draw', tileId: tile.id, seat: HUMAN });
   }
 
@@ -312,6 +316,7 @@ export class Controller {
     if (!canTakeDiscard(this.round, HUMAN)) return;
     const from = previousSeat(HUMAN);
     const tile = takeDiscard(this.round, HUMAN);
+    this.tourAfter('draw');
     this.receive(tile, { kind: 'take', tileId: tile.id, seat: HUMAN, from });
   }
 
@@ -327,6 +332,7 @@ export class Controller {
   humanDiscard(tileId: number): void {
     if (!this.humanMustDiscard) return;
     discardTile(this.round, HUMAN, tileId);
+    this.tourAfter('throw');
     this.release(tileId);
     this.pendingMotions.push({ kind: 'throw', tileId, seat: HUMAN, to: HUMAN });
     this.afterTurn();
@@ -419,6 +425,23 @@ export class Controller {
 
   private today(): number {
     return this.deps.today ? this.deps.today() : dayNumber(new Date());
+  }
+
+  /**
+   * The first-hand guide's step while it is running, otherwise null: 0 the first
+   * throw, 1 the first draw, 2 the second throw. It only runs in the match's own
+   * hand, never in the daily deal, and ends with the hand.
+   */
+  get tour(): number | null {
+    if (this.tutorial >= TUTORIAL_DONE || this.dailyDate !== null || this.round.phase === 'roundOver') return null;
+    return this.tutorial;
+  }
+
+  /** The guide moves on when the player does what the step asked. */
+  private tourAfter(action: 'throw' | 'draw'): void {
+    if (this.tutorial >= TUTORIAL_DONE || this.dailyDate !== null) return;
+    if (action === 'draw') this.tutorial = Math.max(this.tutorial, 2);
+    else this.tutorial = this.tutorial === 0 ? 1 : TUTORIAL_DONE;
   }
 
   /** Whether the daily deal is the hand on the table. */
@@ -589,6 +612,7 @@ export class Controller {
       daily: this.daily,
       dailyDate: this.dailyDate,
       parked: this.parked,
+      tutorial: this.tutorial,
     };
     try {
       await this.deps.platform.saveData(serializeSave(save));
@@ -638,6 +662,8 @@ export class Controller {
   }
 
   private finishRound(): void {
+    // A hand that has been played out is the end of the guide, whatever step it had got to.
+    if (this.dailyDate === null) this.tutorial = TUTORIAL_DONE;
     if (this.dailyDate !== null) this.finishDaily(this.dailyDate);
     else this.finishMatchHand();
     void this.persist();

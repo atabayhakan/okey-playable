@@ -171,6 +171,12 @@ Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü ge
   rakipler her zaman Normal, kurallar sade oynanır. Günlük galibiyet serisi
   tutulur. YouTube'a giden skor, maçtaki ve günlük galibiyetlerin toplamıdır
   (`SAVE_VERSION = 8`).
+- **İlk el rehberi**: kurallar kartını kapatan yeni oyuncuya ilk elde dört kısa
+  adım gösterilir (taş seç, "Buraya at"a dokun, desteden çek, per ve seri yap) ve
+  adımın konusu parlar. Durum çubuğu dar telefonda birkaç kelimelik yer bıraktığı
+  için metinler 21 karakteri geçmez ve rehber sürerken süre göstergesi çekilir.
+  Rehber el bitince ya da son adımdan sonra kapanır, günün elinde çalışmaz;
+  kurallar kartını daha önce okumuş oyuncular hiç görmez (`SAVE_VERSION = 9`).
 - **El değeri** rozeti eldeki taşların toplam değerini gösterir.
 - **Bitirme** düğmesi yalnızca bir taş seçiliyken belirir; el bitince
   "Bitir" hedefi ortaya çıkar.

@@ -275,7 +275,12 @@ export class View {
         this.discardPile(3, 'bl'),
         h(
           'div',
-          { class: `status${this.game.notice ? ` notice ${this.game.notice.kind}` : ''}`, role: 'status', 'aria-live': 'polite' },
+          {
+            // While a guide step is showing the bar gives its room to the words (see `.guided` in the CSS).
+            class: `status${this.game.notice ? ` notice ${this.game.notice.kind}` : ''}${this.tourStep() && !this.game.notice ? ' guided' : ''}`,
+            role: 'status',
+            'aria-live': 'polite',
+          },
           // The clock first: how long this hand has been going.
           h('span', { class: 'clock', title: this.t.clockLabel, 'aria-label': this.t.clockLabel }, this.clockText()),
           // The title keeps the full text reachable when a narrow bar has to cut it.
@@ -437,7 +442,8 @@ export class View {
     if (seat === HUMAN) {
       const active = this.game.humanMustDiscard;
       const hint = active && !top ? h('span', { class: 'hint' }, h('span', { 'aria-hidden': 'true' }, '↓'), this.t.discardHere) : null;
-      return h('button', { class: `discard ${area}${active ? ' target' : ''}${top ? '' : ' empty'}`, 'data-action': 'discard', 'data-drop': 'discard', 'data-key': 'discard', disabled: !active, 'aria-label': this.t.discardHere }, face, hint);
+      const tour = this.tourStep()?.target === 'discard' ? ' tour' : '';
+      return h('button', { class: `discard ${area}${active ? ' target' : ''}${tour}${top ? '' : ' empty'}`, 'data-action': 'discard', 'data-drop': 'discard', 'data-key': 'discard', disabled: !active, 'aria-label': this.t.discardHere }, face, hint);
     }
     return h('div', { class: `discard ${area}${top ? '' : ' empty'}` }, face);
   }
@@ -458,7 +464,7 @@ export class View {
       h(
         'button',
         {
-          class: `pile${low ? ' low' : ''}`,
+          class: `pile${low ? ' low' : ''}${this.tourStep()?.target === 'pile' ? ' tour' : ''}`,
           'data-action': 'draw',
           'data-key': 'draw',
           disabled: !canDraw(r, HUMAN),
@@ -503,6 +509,20 @@ export class View {
     if (clock) clock.textContent = this.clockText();
   }
 
+  /**
+   * What the first-hand guide asks of the player right now, and what on the table to light up for it.
+   * Null when the guide is over, when it is not the player's move, or when the step has nothing to say
+   * (a tile held for the last throw is the finish prompt's business).
+   */
+  private tourStep(): { text: 'tourPick' | 'tourDrop' | 'tourDraw' | 'tourGoal'; target: 'rack' | 'discard' | 'pile' } | null {
+    const { tour, round: r, selected } = this.game;
+    if (tour === null || r.turn !== HUMAN) return null;
+    if (r.phase === 'draw') return { text: 'tourDraw', target: 'pile' };
+    if (tour === 0) return selected !== null ? { text: 'tourDrop', target: 'discard' } : { text: 'tourPick', target: 'rack' };
+    if (tour === 2 && selected === null) return { text: 'tourGoal', target: 'rack' };
+    return null;
+  }
+
   private statusText(): string {
     const { round: r, notice } = this.game;
     const t = this.t;
@@ -511,6 +531,8 @@ export class View {
     if (notice?.kind === 'indicatorShown') return notice.seat === HUMAN ? t.youShowedIndicator : t.indicatorNotice(this.seatName(notice.seat));
     if (notice?.kind === 'noAd') return t.noAd;
     if (this.game.hintTileId !== null) return t.hintShown(this.game.hintAway);
+    const tour = this.tourStep();
+    if (tour) return t[tour.text];
     if (r.turn === HUMAN) {
       if (r.phase === 'draw') return t.drawPrompt;
       // The finish zone only exists while a tile is held, so the prompt follows
@@ -608,7 +630,7 @@ export class View {
     for (const tile of hand) {
       if (!drawn.has(tile.id)) children.push(this.tile(tile, true, used));
     }
-    return h('div', { class: 'rack' }, ...children);
+    return h('div', { class: `rack${this.tourStep()?.target === 'rack' ? ' tour' : ''}` }, ...children);
   }
 
   private tile(tile: Tile, onRack = false, order = 0): HTMLElement {

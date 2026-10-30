@@ -155,6 +155,21 @@ describe('save', () => {
     expect(save.stats.drawn).toBeLessThanOrEqual(2);
   });
 
+  it('gives an old save no guide when its player had read the rules, a new one the first step', () => {
+    for (const [coachSeen, tutorial] of [[true, 3], [false, 0]] as const) {
+      const { tutorial: _t, ...rest } = { ...emptySave(), v: 8, coachSeen };
+      expect(parseSave(JSON.stringify(rest)).tutorial).toBe(tutorial);
+    }
+    // A save from before the rules card existed is from a player who knows the game.
+    expect(parseSave(JSON.stringify({ v: 1, stats: { played: 5, won: 2 } })).tutorial).toBe(3);
+  });
+
+  it('keeps the guide step, and counts a current save with a broken step as done', () => {
+    expect(parseSave(serializeSave({ ...emptySave(), tutorial: 2 })).tutorial).toBe(2);
+    expect(parseSave(JSON.stringify({ ...emptySave(), tutorial: 'later' })).tutorial).toBe(3);
+    expect(parseSave(JSON.stringify({ ...emptySave(), tutorial: 7 })).tutorial).toBe(3);
+  });
+
   it('keeps a quick pace, and falls back to relaxed for a broken one', () => {
     expect(parseSave(serializeSave({ ...emptySave(), botPace: 'quick' })).botPace).toBe('quick');
     expect(parseSave(JSON.stringify({ ...emptySave(), botPace: 'warp' })).botPace).toBe('relaxed');

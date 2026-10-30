@@ -16,8 +16,15 @@ import type { Rack } from './rack';
  * v6: + botPace, how long the opponents take over a move
  * v7: + stats streak, bestStreak, pairsWon, okeyWon, fastestWin, drawn (the statistics screen)
  * v8: + daily, dailyDate, parked: the daily deal and the match hand set aside while it is played
+ * v9: + tutorial, how far the first-hand guide has got (TUTORIAL_DONE once it is over)
  */
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
+
+/**
+ * The first-hand guide: 0 the first throw, 1 the first draw, 2 the second throw,
+ * TUTORIAL_DONE over. Players who already had a game never see it.
+ */
+export const TUTORIAL_DONE = 3;
 
 /** How long the opponents take over a move. */
 export type BotPace = 'relaxed' | 'quick';
@@ -98,6 +105,8 @@ export interface SaveData {
   dailyDate: number | null;
   /** The match hand set aside while `round` is a daily deal. */
   parked: ParkedHand | null;
+  /** How far the first-hand guide has got; TUTORIAL_DONE when it is over. */
+  tutorial: number;
 }
 
 export const emptySave = (): SaveData => ({
@@ -115,6 +124,7 @@ export const emptySave = (): SaveData => ({
   daily: emptyDaily(),
   dailyDate: null,
   parked: null,
+  tutorial: 0,
 });
 
 export const serializeSave = (save: SaveData): string => JSON.stringify(save);
@@ -140,6 +150,7 @@ function upgrade(data: unknown): SaveData {
   if (d.v === 5) d = v5ToV6(d);
   if (d.v === 6) d = v6ToV7(d);
   if (d.v === 7) d = v7ToV8(d);
+  if (d.v === 8) d = v8ToV9(d);
 
   const save = emptySave();
   const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
@@ -160,6 +171,10 @@ function upgrade(data: unknown): SaveData {
   save.coloredOkey = d.coloredOkey === true;
   save.singleColor = d.singleColor === true;
   save.botPace = d.botPace === 'quick' ? 'quick' : 'relaxed';
+  // A current save with a step nobody can name counts as finished: a guide that cannot be shown is better skipped.
+  const step = d.tutorial;
+  const knownStep = typeof step === 'number' && Number.isInteger(step) && step >= 0 && step < TUTORIAL_DONE;
+  save.tutorial = knownStep ? step : d.v === SAVE_VERSION ? TUTORIAL_DONE : 0;
   if (d.v !== SAVE_VERSION) return save;
 
   const daily = (isObject(d.daily) ? d.daily : {}) as Raw;
@@ -226,6 +241,11 @@ function v6ToV7(d: Raw): Raw {
 /** v7 had no daily deal. */
 function v7ToV8(d: Raw): Raw {
   return { ...d, v: 8 };
+}
+
+/** v8 had no guide: a player who has read the rules card has had their start already. */
+function v8ToV9(d: Raw): Raw {
+  return { ...d, v: 9, tutorial: d.coachSeen === true ? TUTORIAL_DONE : 0 };
 }
 
 const isDifficulty = (x: unknown): x is Difficulty => x === 'easy' || x === 'normal' || x === 'hard';
