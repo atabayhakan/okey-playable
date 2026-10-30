@@ -149,6 +149,76 @@ describe('controller', () => {
   });
 });
 
+describe('statistics', () => {
+  const t = (color: 'red' | 'yellow' | 'blue' | 'black', value: number, id: number) => ({ id, kind: 'number' as const, color, value });
+  /** Runs of 4, 3, 3 and 4, plus a spare tile to throw: the player finishes by throwing it. */
+  const winningHand = () => [
+    t('red', 1, 9301), t('red', 2, 9302), t('red', 3, 9303), t('red', 4, 9304),
+    t('blue', 5, 9305), t('blue', 6, 9306), t('blue', 7, 9307),
+    t('black', 9, 9308), t('black', 10, 9309), t('black', 11, 9310),
+    t('yellow', 3, 9311), t('yellow', 4, 9312), t('yellow', 5, 9313), t('yellow', 6, 9314),
+    t('black', 13, 9315),
+  ];
+
+  /** A game in which the player holds a finished hand, having taken `turns` turns before this one. */
+  const readyToFinish = (turns: number) => {
+    const game = makeController();
+    game.round = dealRound(42, HUMAN);
+    // An okey that none of the tiles above can be mistaken for.
+    game.round.okey = { color: 'yellow', value: 12 };
+    game.round.hands[HUMAN] = winningHand();
+    game.round.turnsTaken[HUMAN] = turns;
+    return game;
+  };
+
+  it('counts a win, its streak and the turns it took', () => {
+    const game = readyToFinish(5);
+    game.humanFinish(9315);
+    expect(game.round.winner).toBe(HUMAN);
+    expect(game.stats).toMatchObject({ played: 1, won: 1, streak: 1, bestStreak: 1, fastestWin: 6, pairsWon: 0, okeyWon: 0, drawn: 0 });
+  });
+
+  it('keeps the fewest turns over several wins, and the best streak after a loss', () => {
+    const game = readyToFinish(8);
+    game.humanFinish(9315);
+    game.round = readyToFinish(3).round;
+    game.humanFinish(9315);
+    expect(game.stats).toMatchObject({ won: 2, streak: 2, bestStreak: 2, fastestWin: 4 });
+    // A bot wins the next hand: the streak ends, the best one stays.
+    game.round.winner = 2;
+    game['finishRound']();
+    expect(game.stats).toMatchObject({ played: 3, won: 2, streak: 0, bestStreak: 2, fastestWin: 4 });
+  });
+
+  it('counts a drawn hand without breaking the streak', () => {
+    const game = readyToFinish(1);
+    game.humanFinish(9315);
+    game.round.winner = null;
+    game.round.winKind = null;
+    game['finishRound']();
+    expect(game.stats).toMatchObject({ played: 2, won: 1, streak: 1, drawn: 1 });
+  });
+
+  it('counts a win by throwing the okey, and a win with pairs', () => {
+    const game = readyToFinish(2);
+    // The spare tile is the okey itself: finishing by throwing it counts as an okey finish.
+    game.round.hands[HUMAN][14] = t('yellow', 12, 9316);
+    game.humanFinish(9316);
+    expect(game.stats.okeyWon).toBe(1);
+
+    const pairs = readyToFinish(2);
+    pairs.round.hands[HUMAN] = [
+      t('red', 1, 9401), t('red', 1, 9402), t('red', 5, 9403), t('red', 5, 9404),
+      t('blue', 2, 9405), t('blue', 2, 9406), t('blue', 7, 9407), t('blue', 7, 9408),
+      t('black', 9, 9409), t('black', 9, 9410), t('black', 11, 9411), t('black', 11, 9412),
+      t('yellow', 4, 9413), t('yellow', 4, 9414), t('black', 13, 9415),
+    ];
+    pairs.humanFinish(9415);
+    expect(pairs.round.winKind).toBe('pairs');
+    expect(pairs.stats.pairsWon).toBe(1);
+  });
+});
+
 describe('motion', () => {
   it('tells the view where a drawn tile came from', () => {
     const game = makeController();

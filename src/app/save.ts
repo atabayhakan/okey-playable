@@ -14,8 +14,9 @@ import type { Rack } from './rack';
  * v4: + difficulty, the strength of the computer opponents
  * v5: + matchStart, coloredOkey, singleColor, the optional rules
  * v6: + botPace, how long the opponents take over a move
+ * v7: + stats streak, bestStreak, pairsWon, okeyWon, fastestWin, drawn (the statistics screen)
  */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** How long the opponents take over a move. */
 export type BotPace = 'relaxed' | 'quick';
@@ -26,7 +27,30 @@ export interface Stats {
   won: number;
   matchesPlayed: number;
   matchesWon: number;
+  /** Hands won in a row right now, and the longest run so far. */
+  streak: number;
+  bestStreak: number;
+  /** Hands the player won with seven pairs, and by throwing the okey. */
+  pairsWon: number;
+  okeyWon: number;
+  /** The fewest turns the player took in a hand they won; 0 until one is won. */
+  fastestWin: number;
+  /** Hands that ended with the pile empty and no winner. */
+  drawn: number;
 }
+
+export const emptyStats = (): Stats => ({
+  played: 0,
+  won: 0,
+  matchesPlayed: 0,
+  matchesWon: 0,
+  streak: 0,
+  bestStreak: 0,
+  pairsWon: 0,
+  okeyWon: 0,
+  fastestWin: 0,
+  drawn: 0,
+});
 
 export interface SaveData {
   v: number;
@@ -51,7 +75,7 @@ export interface SaveData {
 
 export const emptySave = (): SaveData => ({
   v: SAVE_VERSION,
-  stats: { played: 0, won: 0, matchesPlayed: 0, matchesWon: 0 },
+  stats: emptyStats(),
   match: newMatch(),
   round: null,
   rack: null,
@@ -84,6 +108,7 @@ function upgrade(data: unknown): SaveData {
   if (d.v === 3) d = v3ToV4(d);
   if (d.v === 4) d = v4ToV5(d);
   if (d.v === 5) d = v5ToV6(d);
+  if (d.v === 6) d = v6ToV7(d);
 
   const save = emptySave();
   const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
@@ -91,6 +116,13 @@ function upgrade(data: unknown): SaveData {
   save.stats.won = Math.min(count(stats.won), save.stats.played);
   save.stats.matchesPlayed = count(stats.matchesPlayed);
   save.stats.matchesWon = Math.min(count(stats.matchesWon), save.stats.matchesPlayed);
+  // The new counters of v7 are not known for hands played before: they start from zero.
+  save.stats.streak = Math.min(count(stats.streak), save.stats.won);
+  save.stats.bestStreak = Math.max(Math.min(count(stats.bestStreak), save.stats.won), save.stats.streak);
+  save.stats.pairsWon = Math.min(count(stats.pairsWon), save.stats.won);
+  save.stats.okeyWon = Math.min(count(stats.okeyWon), save.stats.won);
+  save.stats.fastestWin = save.stats.won > 0 ? count(stats.fastestWin) : 0;
+  save.stats.drawn = Math.min(count(stats.drawn), save.stats.played - save.stats.won);
   save.coachSeen = d.coachSeen === true;
   save.difficulty = isDifficulty(d.difficulty) ? d.difficulty : 'normal';
   save.matchStart = typeof d.matchStart === 'number' && d.matchStart > 0 ? d.matchStart : START_POINTS;
@@ -140,6 +172,11 @@ function v4ToV5(d: Raw): Raw {
 /** v5 had one pace for the opponents. */
 function v5ToV6(d: Raw): Raw {
   return { ...d, v: 6, botPace: 'relaxed' };
+}
+
+/** v6 had no streaks or finish counters; they start from zero (see `upgrade`). */
+function v6ToV7(d: Raw): Raw {
+  return { ...d, v: 7 };
 }
 
 const isDifficulty = (x: unknown): x is Difficulty => x === 'easy' || x === 'normal' || x === 'hard';

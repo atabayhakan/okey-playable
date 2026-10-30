@@ -150,12 +150,12 @@ export class View {
     const focusedKey = (document.activeElement as HTMLElement | null)?.dataset?.key;
     const modal = this.game.round.phase === 'roundOver' ? this.resultModal() : null;
     const coach = this.game.coachOpen ? this.coach() : null;
-    const menu = this.game.menuOpen ? this.menu() : null;
+    const menu = this.game.menuOpen ? (this.game.statsOpen ? this.statsModal() : this.menu()) : null;
     this.root.replaceChildren(this.table(), ...(modal ? [modal] : []), ...(coach ? [coach] : []), ...(menu ? [menu] : []));
     this.fit();
     motions.forEach((motion, index) => this.playMotion(motion, sources[index]));
     if (menu) {
-      menu.querySelector<HTMLElement>('[data-action="close-menu"]')?.focus({ preventScroll: true });
+      menu.querySelector<HTMLElement>('[data-action="close-menu"], [data-action="close-stats"]')?.focus({ preventScroll: true });
     } else if (coach) {
       coach.querySelector<HTMLElement>('[data-action="close-coach"]')?.focus({ preventScroll: true });
     } else if (modal) {
@@ -688,9 +688,47 @@ export class View {
           ...this.settingsSection(),
           // The running numbers.
           h('p', { class: 'lifetime' }, t.lifetime(stats.won, stats.played, stats.matchesWon, stats.matchesPlayed)),
+          h('button', { class: 'chip', 'data-action': 'open-stats', 'data-key': 'open-stats' }, t.statsTitle),
           h('button', { class: 'chip', 'data-action': 'open-coach', 'data-key': 'open-coach' }, t.coachHelp),
         ),
         h('button', { class: 'primary', 'data-action': 'close-menu', 'data-key': 'close-menu' }, t.closeMenu),
+      ),
+    );
+  }
+
+  /** Everything the game has counted, in one place. */
+  private statsModal(): HTMLElement {
+    const t = this.t;
+    const { stats } = this.game;
+    const rate = stats.played > 0 ? `${Math.round((stats.won / stats.played) * 100)}%` : '–';
+    const rows: [string, string][] = [
+      [t.statHandsWon, `${stats.won} / ${stats.played}`],
+      [t.statWinRate, rate],
+      [t.statMatchesWon, `${stats.matchesWon} / ${stats.matchesPlayed}`],
+      [t.statStreak, String(stats.streak)],
+      [t.statBestStreak, String(stats.bestStreak)],
+      [t.statPairs, String(stats.pairsWon)],
+      [t.statOkey, String(stats.okeyWon)],
+      [t.statFastest, stats.fastestWin > 0 ? t.statTurns(stats.fastestWin) : '–'],
+      [t.statDrawn, String(stats.drawn)],
+    ];
+    return h(
+      'div',
+      { class: 'modal-backdrop' },
+      h(
+        'div',
+        { class: 'modal coach menu', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'stats-title' },
+        h(
+          'div',
+          { class: 'modal-body' },
+          h('h2', { id: 'stats-title' }, t.statsTitle),
+          h(
+            'dl',
+            { class: 'stats' },
+            ...rows.flatMap(([label, value]) => [h('dt', {}, label), h('dd', {}, value)]),
+          ),
+        ),
+        h('button', { class: 'primary', 'data-action': 'close-stats', 'data-key': 'close-stats' }, t.statsBack),
       ),
     );
   }
@@ -922,6 +960,12 @@ export class View {
         break;
       case 'close-menu':
         g.closeMenu();
+        break;
+      case 'open-stats':
+        g.openStats();
+        break;
+      case 'close-stats':
+        g.closeStats();
         break;
       case 'new-match':
         g.newMatch();

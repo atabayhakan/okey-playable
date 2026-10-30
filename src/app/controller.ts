@@ -15,7 +15,7 @@ import {
   type RoundState,
 } from '../core/game';
 import { randomSeed } from '../core/rng';
-import { isMatchOver, matchLeaders, newMatch, scoreRound, handValue, START_POINTS, type MatchState, type RuleOptions } from '../core/scoring';
+import { finishedWithOkey, isMatchOver, matchLeaders, newMatch, scoreRound, handValue, START_POINTS, type MatchState, type RuleOptions } from '../core/scoring';
 import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
 import type { Motion } from './motion';
@@ -83,6 +83,8 @@ export class Controller {
   coachOpen = false;
   /** The menu is open. */
   menuOpen = false;
+  /** The statistics screen is open (it opens from the menu). */
+  statsOpen = false;
   /** What happened on the table, waiting for the view to show it. */
   pendingMotions: Motion[] = [];
   /** When this hand was dealt, for the clock. */
@@ -402,6 +404,19 @@ export class Controller {
 
   closeMenu(): void {
     this.menuOpen = false;
+    this.statsOpen = false;
+    this.changed();
+  }
+
+  /** The statistics screen replaces the menu; closing it returns to the menu. */
+  openStats(): void {
+    this.statsOpen = true;
+    this.menuOpen = true;
+    this.changed();
+  }
+
+  closeStats(): void {
+    this.statsOpen = false;
     this.changed();
   }
 
@@ -519,10 +534,23 @@ export class Controller {
 
   private finishRound(): void {
     this.lastPenalties = scoreRound(this.match, this.round, this.rules);
-    this.stats.played++;
-    if (this.round.winner === HUMAN) {
-      this.stats.won++;
+    const { stats, round } = this;
+    stats.played++;
+    if (round.winner === HUMAN) {
+      stats.won++;
+      stats.streak++;
+      stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
+      if (round.winKind === 'pairs') stats.pairsWon++;
+      if (finishedWithOkey(round)) stats.okeyWon++;
+      // The finishing throw ends the hand without being counted as a turn.
+      const turns = round.turnsTaken[HUMAN] + 1;
+      stats.fastestWin = stats.fastestWin === 0 ? turns : Math.min(stats.fastestWin, turns);
       this.deps.sound.win();
+    } else if (round.winner === null) {
+      // Nobody won: a run of wins is not broken by a hand that was never decided.
+      stats.drawn++;
+    } else {
+      stats.streak = 0;
     }
     if (this.matchOver) {
       this.stats.matchesPlayed++;

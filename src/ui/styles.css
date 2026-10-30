@@ -1132,6 +1132,27 @@ button.tile {
   font-size: 14px;
 }
 
+/* The statistics screen: a label on the left, its number on the right. */
+.modal .stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  margin: 12px 0 0;
+  text-align: left;
+  font-size: 15px;
+}
+
+.modal .stats dt {
+  color: #555;
+}
+
+.modal .stats dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 /* Tek renk bitiş: kazanma vurgusu. */
 .modal .single-color {
   margin: 8px auto 0;

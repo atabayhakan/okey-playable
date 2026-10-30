@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { arrangePairs, arrangeRuns, GROUP_BREAK, RACK_SLOTS } from '../src/app/rack';
-import { emptySave, parseSave, SAVE_VERSION, serializeSave } from '../src/app/save';
+import { emptySave, emptyStats, parseSave, SAVE_VERSION, serializeSave } from '../src/app/save';
 import { newMatch } from '../src/core/scoring';
 import { botPlanDiscard, botWantsDiscard } from '../src/core/bot';
 import { TILE_COUNT } from '../src/core/deck';
@@ -99,7 +99,7 @@ describe('save', () => {
   it('round-trips a game in progress', () => {
     const save = {
       ...emptySave(),
-      stats: { played: 3, won: 1, matchesPlayed: 1, matchesWon: 0 },
+      stats: { ...emptyStats(), played: 3, won: 1, matchesPlayed: 1, streak: 1, bestStreak: 1, fastestWin: 9 },
       match: { points: [18, 14, 20, 16], hands: 3, start: 20 },
       round: dealRound(9, 1),
       rack: null,
@@ -109,7 +109,7 @@ describe('save', () => {
 
   it('keeps stats but drops a corrupted round', () => {
     const save = parseSave(JSON.stringify({ v: 2, stats: { played: 5, won: 2 }, match: { points: [1, 2], hands: 0 }, round: { pile: [] } }));
-    expect(save.stats).toEqual({ played: 5, won: 2, matchesPlayed: 0, matchesWon: 0 });
+    expect(save.stats).toEqual({ ...emptyStats(), played: 5, won: 2 });
     expect(save.match).toEqual(newMatch());
     expect(save.round).toBeNull();
   });
@@ -118,7 +118,7 @@ describe('save', () => {
     const { turnsTaken: _t, indicatorShownBy: _i, ...v1Round } = dealRound(9, 1);
     const save = parseSave(JSON.stringify({ v: 1, stats: { played: 5, won: 2 }, round: v1Round, rack: [] }));
     expect(save.v).toBe(SAVE_VERSION);
-    expect(save.stats).toEqual({ played: 5, won: 2, matchesPlayed: 0, matchesWon: 0 });
+    expect(save.stats).toEqual({ ...emptyStats(), played: 5, won: 2 });
     expect(save.match).toEqual(newMatch());
     expect(save.round?.hands).toEqual(v1Round.hands);
     // Turns played before the upgrade are unknown, so nobody may show the indicator in that hand.
@@ -134,6 +134,25 @@ describe('save', () => {
     expect(save.difficulty).toBe('hard');
     expect(save.matchStart).toBe(40);
     expect(save.round?.seed).toBe(9);
+  });
+
+  it('upgrades a v6 save: the old counters stay, the new ones start from zero', () => {
+    const { botPace, ...rest } = emptySave();
+    const v6 = { ...rest, botPace, v: 6, stats: { played: 8, won: 5, matchesPlayed: 2, matchesWon: 1 }, round: dealRound(3, 1), rack: null };
+    const save = parseSave(JSON.stringify(v6));
+    expect(save.v).toBe(SAVE_VERSION);
+    expect(save.stats).toEqual({ ...emptyStats(), played: 8, won: 5, matchesPlayed: 2, matchesWon: 1 });
+    expect(save.round?.seed).toBe(3);
+  });
+
+  it('does not trust counters that contradict each other', () => {
+    const stats = { played: 4, won: 2, matchesPlayed: 0, matchesWon: 0, streak: 9, bestStreak: 1, pairsWon: 7, okeyWon: 1, fastestWin: 12, drawn: 9 };
+    const save = parseSave(JSON.stringify({ ...emptySave(), stats }));
+    expect(save.stats.streak).toBe(2);
+    expect(save.stats.bestStreak).toBeGreaterThanOrEqual(save.stats.streak);
+    expect(save.stats.pairsWon).toBe(2);
+    // A hand that was won was not drawn.
+    expect(save.stats.drawn).toBeLessThanOrEqual(2);
   });
 
   it('keeps a quick pace, and falls back to relaxed for a broken one', () => {
