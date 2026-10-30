@@ -836,6 +836,29 @@ details.menu[open] > summary {
   background: #185c3e;
 }
 
+/* The daily deal sits above the match button, as a prize rather than a setting. */
+.modal .daily {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  min-height: 48px;
+  border-color: #b8860b;
+  background: #ffc94a;
+  color: #0a2318;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.modal .daily:hover:not(:disabled) {
+  background: #f5bb2b;
+}
+
+.modal .daily:disabled,
+.modal .new-match:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* Durum çubuğundaki süre. */
 .clock {
   flex: 0 0 auto;

@@ -15,8 +15,9 @@ import type { Rack } from './rack';
  * v5: + matchStart, coloredOkey, singleColor, the optional rules
  * v6: + botPace, how long the opponents take over a move
  * v7: + stats streak, bestStreak, pairsWon, okeyWon, fastestWin, drawn (the statistics screen)
+ * v8: + daily, dailyDate, parked: the daily deal and the match hand set aside while it is played
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** How long the opponents take over a move. */
 export type BotPace = 'relaxed' | 'quick';
@@ -52,6 +53,27 @@ export const emptyStats = (): Stats => ({
   drawn: 0,
 });
 
+/** The daily deal: one hand a day, the same for everyone that day. */
+export interface DailyStats {
+  /** The day (YYYYMMDD) of the last daily deal that was played to the end; 0 for none. */
+  lastDate: number;
+  /** Whether the player won that one. */
+  lastWon: boolean;
+  played: number;
+  won: number;
+  /** Consecutive days won, and the longest run. */
+  streak: number;
+  best: number;
+}
+
+export const emptyDaily = (): DailyStats => ({ lastDate: 0, lastWon: false, played: 0, won: 0, streak: 0, best: 0 });
+
+/** The match hand that is set aside while the daily deal is played. */
+export interface ParkedHand {
+  round: RoundState;
+  rack: Rack | null;
+}
+
 export interface SaveData {
   v: number;
   stats: Stats;
@@ -71,6 +93,11 @@ export interface SaveData {
   singleColor: boolean;
   /** How long the opponents take over a move. */
   botPace: BotPace;
+  daily: DailyStats;
+  /** The day of the daily deal that `round` is; null when `round` belongs to the match. */
+  dailyDate: number | null;
+  /** The match hand set aside while `round` is a daily deal. */
+  parked: ParkedHand | null;
 }
 
 export const emptySave = (): SaveData => ({
@@ -85,6 +112,9 @@ export const emptySave = (): SaveData => ({
   coloredOkey: false,
   singleColor: false,
   botPace: 'relaxed',
+  daily: emptyDaily(),
+  dailyDate: null,
+  parked: null,
 });
 
 export const serializeSave = (save: SaveData): string => JSON.stringify(save);
@@ -109,6 +139,7 @@ function upgrade(data: unknown): SaveData {
   if (d.v === 4) d = v4ToV5(d);
   if (d.v === 5) d = v5ToV6(d);
   if (d.v === 6) d = v6ToV7(d);
+  if (d.v === 7) d = v7ToV8(d);
 
   const save = emptySave();
   const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
@@ -130,6 +161,19 @@ function upgrade(data: unknown): SaveData {
   save.singleColor = d.singleColor === true;
   save.botPace = d.botPace === 'quick' ? 'quick' : 'relaxed';
   if (d.v !== SAVE_VERSION) return save;
+
+  const daily = (isObject(d.daily) ? d.daily : {}) as Raw;
+  save.daily.played = count(daily.played);
+  save.daily.won = Math.min(count(daily.won), save.daily.played);
+  save.daily.streak = Math.min(count(daily.streak), save.daily.won);
+  save.daily.best = Math.max(Math.min(count(daily.best), save.daily.won), save.daily.streak);
+  save.daily.lastDate = count(daily.lastDate);
+  save.daily.lastWon = save.daily.lastDate > 0 && daily.lastWon === true;
+  save.dailyDate = count(d.dailyDate) > 0 ? count(d.dailyDate) : null;
+  if (isObject(d.parked) && looksLikeRound((d.parked as Raw).round)) {
+    const p = d.parked as Raw;
+    save.parked = { round: p.round as RoundState, rack: Array.isArray(p.rack) ? (p.rack as Rack) : null };
+  }
 
   if (looksLikeMatch(d.match)) {
     const m = d.match;
@@ -177,6 +221,11 @@ function v5ToV6(d: Raw): Raw {
 /** v6 had no streaks or finish counters; they start from zero (see `upgrade`). */
 function v6ToV7(d: Raw): Raw {
   return { ...d, v: 7 };
+}
+
+/** v7 had no daily deal. */
+function v7ToV8(d: Raw): Raw {
+  return { ...d, v: 8 };
 }
 
 const isDifficulty = (x: unknown): x is Difficulty => x === 'easy' || x === 'normal' || x === 'hard';

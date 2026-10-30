@@ -562,7 +562,13 @@ export class View {
       // The menu: a new match, the settings, the numbers.
       h('button', { class: 'chip help', 'data-action': 'open-menu', 'data-key': 'open-menu', 'aria-label': t.menuLabel, title: t.menuLabel }, '☰'),
       // While the result is up the hand counter already includes it; show the hand it was.
-      h('div', { class: 'score' }, t.yourPoints(match.points[HUMAN], this.game.round.phase === 'roundOver' ? match.hands : match.hands + 1)),
+      h(
+        'div',
+        { class: 'score' },
+        this.game.dailyActive
+          ? t.dailyBadge
+          : t.yourPoints(match.points[HUMAN], this.game.round.phase === 'roundOver' ? match.hands : match.hands + 1),
+      ),
     );
   }
 
@@ -680,9 +686,17 @@ export class View {
           'div',
           { class: 'modal-body' },
           h('h2', { id: 'menu-title' }, t.menu),
+          this.dailyButton(),
           h(
             'button',
-            { class: 'chip new-match', 'data-action': 'new-match', 'data-key': 'new-match', title: t.newMatchHint },
+            {
+              class: 'chip new-match',
+              'data-action': 'new-match',
+              'data-key': 'new-match',
+              title: t.newMatchHint,
+              // The match is set aside while the daily deal is played.
+              disabled: this.game.dailyActive,
+            },
             t.newMatch,
           ),
           ...this.settingsSection(),
@@ -696,10 +710,28 @@ export class View {
     );
   }
 
+  /** The daily deal: play it, carry on with it, or see how today's went. */
+  private dailyButton(): HTMLElement {
+    const t = this.t;
+    const { daily, dailyActive, dailyDoneToday } = this.game;
+    const label = dailyActive ? t.dailyContinue : dailyDoneToday ? (daily.lastWon ? t.dailyDoneWon : t.dailyDoneLost) : t.dailyPlay;
+    return h(
+      'button',
+      {
+        class: 'chip daily',
+        'data-action': 'daily',
+        'data-key': 'daily',
+        title: t.dailyHint,
+        disabled: dailyDoneToday && !dailyActive,
+      },
+      label,
+    );
+  }
+
   /** Everything the game has counted, in one place. */
   private statsModal(): HTMLElement {
     const t = this.t;
-    const { stats } = this.game;
+    const { stats, daily } = this.game;
     const rate = stats.played > 0 ? `${Math.round((stats.won / stats.played) * 100)}%` : '–';
     const rows: [string, string][] = [
       [t.statHandsWon, `${stats.won} / ${stats.played}`],
@@ -711,6 +743,9 @@ export class View {
       [t.statOkey, String(stats.okeyWon)],
       [t.statFastest, stats.fastestWin > 0 ? t.statTurns(stats.fastestWin) : '–'],
       [t.statDrawn, String(stats.drawn)],
+      [t.statDailyWon, `${daily.won} / ${daily.played}`],
+      [t.statDailyStreak, String(daily.streak)],
+      [t.statDailyBest, String(daily.best)],
     ];
     return h(
       'div',
@@ -830,7 +865,35 @@ export class View {
     ];
   }
 
+  /** The daily deal's result: a win or not, the day streak, and the way back to the match. */
+  private dailyResultModal(): HTMLElement {
+    const { round: r, daily } = this.game;
+    const t = this.t;
+    const title = r.winner === null ? t.drawnRound : r.winner === HUMAN ? t.youWon : t.someoneWon(this.seatName(r.winner));
+    const detail = r.winKind ? t.finishedWith(r.winKind === 'pairs', finishedWithOkey(r)) : '';
+    return h(
+      'div',
+      { class: 'modal-backdrop' },
+      h(
+        'div',
+        { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'result-title' },
+        h(
+          'div',
+          { class: 'modal-body' },
+          h('p', { class: 'match-over' }, t.dailyBadge),
+          h('h2', { id: 'result-title' }, title),
+          detail && h('p', { class: 'detail' }, detail),
+          r.winner !== null && h('div', { class: 'hand' }, ...this.winningHand(r.winner)),
+          h('p', { class: 'lifetime' }, t.dailyStreakLine(daily.streak, daily.best)),
+          h('p', { class: 'rule' }, t.dailyTomorrow),
+        ),
+        h('button', { class: 'primary', 'data-action': 'next-hand', 'data-key': 'next-hand' }, t.dailyBack),
+      ),
+    );
+  }
+
   private resultModal(): HTMLElement {
+    if (this.game.dailyActive) return this.dailyResultModal();
     const { round: r, stats, match, matchOver, seed } = this.game;
     const t = this.t;
     const title = r.winner === null ? t.drawnRound : r.winner === HUMAN ? t.youWon : t.someoneWon(this.seatName(r.winner));
@@ -960,6 +1023,9 @@ export class View {
         break;
       case 'close-menu':
         g.closeMenu();
+        break;
+      case 'daily':
+        g.startDaily();
         break;
       case 'open-stats':
         g.openStats();

@@ -14,13 +14,25 @@ import {
   takeDiscard,
   type RoundState,
 } from '../core/game';
+import { dailySeed, dayNumber, previousDay } from '../core/daily';
 import { randomSeed } from '../core/rng';
-import { finishedWithOkey, isMatchOver, matchLeaders, newMatch, scoreRound, handValue, START_POINTS, type MatchState, type RuleOptions } from '../core/scoring';
+import {
+  finishedWithOkey,
+  isMatchOver,
+  matchLeaders,
+  newMatch,
+  NO_EXTRA_RULES,
+  scoreRound,
+  handValue,
+  START_POINTS,
+  type MatchState,
+  type RuleOptions,
+} from '../core/scoring';
 import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
 import type { Motion } from './motion';
 import { arrangeMelds, arrangePairs, arrangeRuns, compactRack, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
-import { SAVE_VERSION, serializeSave, type BotPace, type SaveData, type Stats } from './save';
+import { SAVE_VERSION, serializeSave, type BotPace, type DailyStats, type ParkedHand, type SaveData, type Stats } from './save';
 import type { Scheduler } from './scheduler';
 import type { Sound } from './sound';
 
@@ -55,7 +67,12 @@ interface Deps {
   sound: Sound;
   /** Seed for the first hand dealt, so a deal can be asked for (tests, layout checks); later hands are random. */
   firstSeed?: number;
+  /** Today as YYYYMMDD; tests pass their own. */
+  today?: () => number;
 }
+
+/** The daily deal is played against the same opponents for everyone, whatever the table setting. */
+const DAILY_DIFFICULTY: Difficulty = 'normal';
 
 function freshRound(starter: number, seed: number = randomSeed()): { round: RoundState; rack: Rack } {
   const round = dealRound(seed, starter);
@@ -105,6 +122,12 @@ export class Controller {
   singleColor = false;
   /** How long the opponents take over a move. */
   botPace: BotPace = 'relaxed';
+  /** The daily deal's results. */
+  daily: DailyStats;
+  /** The day of the daily deal being played, or null while the hand belongs to the match. */
+  dailyDate: number | null = null;
+  /** The match hand set aside while the daily deal is played. */
+  private parked: ParkedHand | null = null;
 
   private readonly listeners = new Set<() => void>();
   private readonly clockListeners = new Set<() => void>();
@@ -134,15 +157,30 @@ export class Controller {
     this.coloredOkey = save.coloredOkey;
     this.singleColor = save.singleColor;
     this.botPace = save.botPace;
+    this.daily = { ...save.daily };
     // A new player gets the rules card over their first hand.
     this.coachOpen = !save.coachSeen;
-    if (save.round && save.round.phase !== 'roundOver') {
-      this.round = save.round;
-      this.rack = reconcileRack(save.rack ?? [], save.round.hands[HUMAN]);
+
+    // A daily deal that is finished, or belongs to a day that is over, is not resumed: the
+    // match hand that was set aside comes back (its result, if it was played out, is in `daily`).
+    let { round, rack } = save;
+    let parked = save.parked;
+    let dailyDate = save.dailyDate;
+    if (dailyDate !== null && (dailyDate !== this.today() || !round || round.phase === 'roundOver')) {
+      ({ round = null, rack = null } = parked ?? {});
+      parked = null;
+      dailyDate = null;
+    }
+    this.dailyDate = dailyDate;
+    this.parked = parked;
+
+    if (round && round.phase !== 'roundOver') {
+      this.round = round;
+      this.rack = reconcileRack(rack ?? [], round.hands[HUMAN]);
     } else {
       // The player left on the result screen: that hand is already scored, so move on.
       if (isMatchOver(this.match)) this.match = newMatch(this.matchStart);
-      ({ round: this.round, rack: this.rack } = freshRound(save.round ? nextSeat(save.round.starter) : HUMAN, deps.firstSeed));
+      ({ round: this.round, rack: this.rack } = freshRound(round ? nextSeat(round.starter) : HUMAN, deps.firstSeed));
       this.dealtOnLoad = true;
     }
     // Counted from here on: the hand may already hold a complete set.
@@ -369,9 +407,61 @@ export class Controller {
     this.changed();
   }
 
-  /** The optional rules that change what a finished hand is worth. */
+  /** The optional rules that change what a finished hand is worth; the daily deal plays by the plain ones. */
   get rules(): RuleOptions {
-    return { coloredOkey: this.coloredOkey, singleColor: this.singleColor };
+    return this.dailyDate !== null ? NO_EXTRA_RULES : { coloredOkey: this.coloredOkey, singleColor: this.singleColor };
+  }
+
+  /** How sharp the opponents are in the hand being played. */
+  private get botLevel(): Difficulty {
+    return this.dailyDate !== null ? DAILY_DIFFICULTY : this.difficulty;
+  }
+
+  private today(): number {
+    return this.deps.today ? this.deps.today() : dayNumber(new Date());
+  }
+
+  /** Whether the daily deal is the hand on the table. */
+  get dailyActive(): boolean {
+    return this.dailyDate !== null;
+  }
+
+  /** Today's daily deal has been played to the end. */
+  get dailyDoneToday(): boolean {
+    return this.daily.lastDate === this.today();
+  }
+
+  /** Hands won in the match and in daily deals together: the score sent to YouTube. */
+  private get totalWins(): number {
+    return this.stats.won + this.daily.won;
+  }
+
+  /**
+   * Sets the match hand aside and deals today's daily deal: the same hand for everyone who
+   * plays today, once a day. A daily deal already begun is simply resumed.
+   */
+  startDaily(): void {
+    if (this.dailyDate !== null) {
+      this.closeMenu();
+      return;
+    }
+    // Played already today, or the match hand is on its result screen (it is closed from there).
+    if (this.dailyDoneToday || this.round.phase === 'roundOver') return;
+    const day = this.today();
+    this.parked = { round: this.round, rack: this.rack };
+    this.dailyDate = day;
+    this.menuOpen = false;
+    this.statsOpen = false;
+    this.enterRound(freshRound(HUMAN, dailySeed(day)), true);
+  }
+
+  /** From the daily deal's result: back to the match hand that was set aside. */
+  private leaveDaily(): void {
+    const parked = this.parked;
+    this.dailyDate = null;
+    this.parked = null;
+    if (parked) this.enterRound({ round: parked.round, rack: reconcileRack(parked.rack ?? [], parked.round.hands[HUMAN]) }, false);
+    else this.enterRound(freshRound(HUMAN), true);
   }
 
   /** The colored okey: a red or black indicator makes the okey count double. */
@@ -426,6 +516,8 @@ export class Controller {
    * back — this is the way out when they want a clean start instead.
    */
   newMatch(): void {
+    // The daily deal is not part of the match: finish it, then the match can be thrown away.
+    if (this.dailyDate !== null) return;
     this.dealHand(true);
   }
 
@@ -439,7 +531,8 @@ export class Controller {
         // Ads are not guaranteed (region, platform, fill); the game goes on either way.
         await this.deps.platform.requestInterstitialAd().catch(() => undefined);
       }
-      this.dealHand(this.matchOver);
+      if (this.dailyDate !== null) this.leaveDaily();
+      else this.dealHand(this.matchOver);
     } finally {
       this.advancing = false;
     }
@@ -447,10 +540,15 @@ export class Controller {
 
   /** Deals a hand; with fresh points it is a whole new match. */
   private dealHand(freshPoints: boolean): void {
+    if (freshPoints) this.match = newMatch(this.matchStart);
+    this.enterRound(freshRound(nextSeat(this.round.starter)), true);
+  }
+
+  /** Puts a hand on the table; `deal` plays the dealing animation (a hand picked up again has none). */
+  private enterRound(next: { round: RoundState; rack: Rack }, deal: boolean): void {
     this.cancelBot?.();
     this.cancelBot = null;
-    if (freshPoints) this.match = newMatch(this.matchStart);
-    ({ round: this.round, rack: this.rack } = freshRound(nextSeat(this.round.starter)));
+    ({ round: this.round, rack: this.rack } = next);
     this.lastPenalties = null;
     this.selected = null;
     this.lastDrawn = null;
@@ -458,16 +556,20 @@ export class Controller {
     // A new hand brings a new free hint.
     this.hintUsedThisHand = false;
     this.handStartedAt = performance.now();
-    this.dealing = true;
+    this.dealing = deal;
+    // A hand picked up again did not just form its sets: no chime for them.
+    if (!deal) this.lastMeldCount = this.melds.length;
     this.clearNotice();
     void this.persist();
     this.changed();
     this.scheduleBot();
     // The deal is over in a moment; the tiles then sit still.
-    this.deps.scheduler.after(DEAL_ANIM_MS, () => {
-      this.dealing = false;
-      this.changed();
-    });
+    if (deal) {
+      this.deps.scheduler.after(DEAL_ANIM_MS, () => {
+        this.dealing = false;
+        this.changed();
+      });
+    }
   }
 
   async persist(): Promise<void> {
@@ -484,6 +586,9 @@ export class Controller {
       coloredOkey: this.coloredOkey,
       singleColor: this.singleColor,
       botPace: this.botPace,
+      daily: this.daily,
+      dailyDate: this.dailyDate,
+      parked: this.parked,
     };
     try {
       await this.deps.platform.saveData(serializeSave(save));
@@ -533,6 +638,32 @@ export class Controller {
   }
 
   private finishRound(): void {
+    if (this.dailyDate !== null) this.finishDaily(this.dailyDate);
+    else this.finishMatchHand();
+    void this.persist();
+    // The score sent must match the best score in the save: total hands won, the daily ones too.
+    this.deps.platform.sendScore(this.totalWins).catch(() => this.deps.platform.logWarning());
+  }
+
+  /** A daily deal is over: one result a day, kept apart from the match and its numbers. */
+  private finishDaily(day: number): void {
+    const { daily, round } = this;
+    const won = round.winner === HUMAN;
+    daily.played++;
+    if (won) {
+      daily.won++;
+      // Days in a row: yesterday's deal must have been won too.
+      daily.streak = daily.lastWon && daily.lastDate === previousDay(day) ? daily.streak + 1 : 1;
+      daily.best = Math.max(daily.best, daily.streak);
+      this.deps.sound.win();
+    } else {
+      daily.streak = 0;
+    }
+    daily.lastDate = day;
+    daily.lastWon = won;
+  }
+
+  private finishMatchHand(): void {
     this.lastPenalties = scoreRound(this.match, this.round, this.rules);
     const { stats, round } = this;
     stats.played++;
@@ -556,15 +687,12 @@ export class Controller {
       this.stats.matchesPlayed++;
       if (matchLeaders(this.match).includes(HUMAN)) this.stats.matchesWon++;
     }
-    void this.persist();
-    // The score sent must match the best score in the save: total hands won.
-    this.deps.platform.sendScore(this.stats.won).catch(() => this.deps.platform.logWarning());
   }
 
   private scheduleBot(): void {
     const r = this.round;
     if (this.cancelBot || r.phase === 'roundOver' || r.turn === HUMAN) return;
-    const base = r.phase === 'draw' ? BOT_DELAY[this.difficulty].draw : BOT_DELAY[this.difficulty].discard;
+    const base = r.phase === 'draw' ? BOT_DELAY[this.botLevel].draw : BOT_DELAY[this.botLevel].discard;
     const delay = this.botPace === 'quick' ? Math.round(base * QUICK_PACE) : base;
     this.cancelBot = this.deps.scheduler.after(delay, () => {
       this.cancelBot = null;
@@ -583,7 +711,7 @@ export class Controller {
       this.deps.sound.show();
     }
     if (r.phase === 'draw') {
-      if (botWantsDiscard(r, seat, this.difficulty)) {
+      if (botWantsDiscard(r, seat, this.botLevel)) {
         const from = previousSeat(seat);
         const tile = takeDiscard(r, seat);
         this.pendingMotions.push({ kind: 'take', tileId: tile.id, seat, from });
@@ -596,7 +724,7 @@ export class Controller {
       this.scheduleBot();
       return;
     }
-    const plan = botPlanDiscard(r, seat, this.difficulty);
+    const plan = botPlanDiscard(r, seat, this.botLevel);
     if (plan.win && declareWin(r, seat, plan.tileId)) {
       this.pendingMotions.push({ kind: 'win', seat });
     } else {

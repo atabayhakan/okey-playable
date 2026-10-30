@@ -160,6 +160,17 @@ Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü ge
 - **Rakip zorluğu** kurallar kartından seçilir: kolay, normal, zor. Zor
   rakipler per tamamlayan taşı alır ve elini korur; kolay rakipler daha
   savunmasız oynar. Kayıtta saklanır (`SAVE_VERSION = 4`).
+- **Rakip hızı** (Rahat / Hızlı): botların bekleme süresi, taş uçuşu aynı kalır.
+  Orta deste 12 taşa inince sayaç amber olur: el, deste bitince biter
+  (`SAVE_VERSION = 6`).
+- **İstatistikler** (Menü): kazanılan el ve maç, kazanma oranı, galibiyet serisi,
+  çiftle ve okeyle kazanılanlar, en hızlı galibiyet (`SAVE_VERSION = 7`).
+- **Günün eli** (Menü): günde bir el, o gün herkese aynı dağıtım (tohum yerel
+  takvim gününden gelir, `src/core/daily.ts`). Maç eli kenara alınır ve el
+  bitince geri gelir; günün eli maç puanını ve el istatistiklerini etkilemez,
+  rakipler her zaman Normal, kurallar sade oynanır. Günlük galibiyet serisi
+  tutulur. YouTube'a giden skor, maçtaki ve günlük galibiyetlerin toplamıdır
+  (`SAVE_VERSION = 8`).
 - **El değeri** rozeti eldeki taşların toplam değerini gösterir.
 - **Bitirme** düğmesi yalnızca bir taş seçiliyken belirir; el bitince
   "Bitir" hedefi ortaya çıkar.
