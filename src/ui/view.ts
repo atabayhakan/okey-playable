@@ -261,8 +261,10 @@ export class View {
 
   private table(): HTMLElement {
     return h(
-      'div',
+      // The table is the page's main region; the heading is for screen readers only.
+      'main',
       { class: 'table' },
+      h('h1', { class: 'sr-only' }, this.t.gameTitle),
       h(
         'div',
         { class: 'board' },

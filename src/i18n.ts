@@ -3,6 +3,7 @@
 
 const en = {
   langTag: 'en',
+  gameTitle: 'Okey',
   you: 'You',
   botNames: ['Ali', 'Ayşe', 'Can'],
   tiles: (n: number) => `${n} tiles`,
@@ -120,6 +121,7 @@ export type Strings = typeof en;
 
 const tr: Strings = {
   langTag: 'tr',
+  gameTitle: 'Okey',
   you: 'Sen',
   botNames: ['Ali', 'Ayşe', 'Can'],
   tiles: (n) => `${n} taş`,
