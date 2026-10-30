@@ -57,13 +57,39 @@ const PROBE = `(() => {
         return (e.className || e.tagName) + '[' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(',') + ']';
       }).concat(['--tile-w=' + getComputedStyle(document.getElementById('app')).getPropertyValue('--tile-w'), '--btw=' + getComputedStyle(document.getElementById('app')).getPropertyValue('--btw'), 'compact=' + document.getElementById('app').hasAttribute('data-compact'), 'rack tiles=' + document.querySelectorAll('.rack [data-tile-id]').length, '--cols=' + getComputedStyle(document.getElementById('app')).getPropertyValue('--cols'), 'rack rows=' + getComputedStyle(document.querySelector('.rack')).gridTemplateRows.split(' ').length, 'rack items=' + [...document.querySelectorAll('.rack > *')].map((e) => e.className.includes('gap') ? 'g' : e.className.includes('empty') ? 'e' : 't').join('')])
     : [];
+  // The status bar's words, and whether the bar had to cut them (a guide step has to be read in full).
+  const words = document.querySelector('.status-text');
   return {
     overlaps, off, board,
+    status: words ? words.textContent : '',
+    statusCut: Boolean(words) && (words.scrollWidth > words.clientWidth + 1 || words.scrollHeight > words.clientHeight + 1),
     sideways: document.documentElement.scrollWidth > innerWidth + 1,
     tile,
     ready: Boolean(document.querySelector('.table')),
     show: Boolean(document.querySelector('.indicator.has-action')),
   };
+})()`;
+
+/**
+ * In the page: whether the dialog that is open keeps its contents inside itself and the screen, and whether a
+ * button or a label had to cut its words. Long words in another language are what this is for.
+ */
+const MODAL_PROBE = `(() => {
+  const modal = document.querySelector('.modal');
+  if (!modal) return ['no dialog is open'];
+  const box = modal.getBoundingClientRect();
+  const problems = [];
+  if (box.right > innerWidth + 1 || box.left < -1 || box.bottom > innerHeight + 1 || box.top < -1) problems.push('the dialog itself is off the screen');
+  const name = (e) => (e.className && String(e.className).split(' ')[0] || e.tagName.toLowerCase()) + ' "' + e.textContent.trim().slice(0, 28) + '"';
+  for (const e of modal.querySelectorAll('button, .chip, .label, dt, dd, th, td, p, h2, li, span')) {
+    const r = e.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    if (r.right > box.right + 1 || r.left < box.left - 1) problems.push('sticks out of the dialog: ' + name(e));
+    if ((e.matches('button, .chip, .label, dt, dd, th, td, h2')) && e.scrollWidth > e.clientWidth + 1) problems.push('cuts its words: ' + name(e));
+  }
+  const body = modal.querySelector('.modal-body');
+  if (body && body.scrollWidth > body.clientWidth + 1) problems.push('the dialog body scrolls sideways');
+  return problems;
 })()`;
 
 /** A tile thrown and the bots' answers, until it is the player's turn to draw again. */
@@ -91,17 +117,26 @@ const note = (size, state, problem) => failures.push(`${size} ${state}: ${proble
  */
 const WIDE_FONT_CSS = `* { letter-spacing: ${process.env.LAYOUT_SPACING ?? '0.07'}em !important; }`;
 
+/**
+ * The other languages, at the sizes where a long word hurts most: a phone narrower than usual, a normal one, a
+ * phone on its side and a desktop window. German and Dutch have the longest words.
+ */
+const LANGUAGE_SIZES = new Set(['280x320', '320x568', '360x640', '390x844', '568x320', '844x390', '1280x720']);
+
 const PASSES = [
-  { name: '', css: null, sizes: SIZES },
-  { name: 'wide font ', css: WIDE_FONT_CSS, sizes: SIZES.filter(([w, h]) => DRAW_STATE_SIZES.has(`${w}x${h}`) || w === 320 || w === 340) },
+  { id: 'plain', name: '', lang: 'en', css: null, sizes: SIZES },
+  { id: 'wide', name: 'wide font ', lang: 'en', css: WIDE_FONT_CSS, sizes: SIZES.filter(([w, h]) => DRAW_STATE_SIZES.has(`${w}x${h}`) || w === 320 || w === 340) },
+  ...['tr', 'de', 'nl', 'az'].map((lang) => ({ id: lang, name: `${lang} `, lang, css: null, sizes: SIZES.filter(([w, h]) => LANGUAGE_SIZES.has(`${w}x${h}`)) })),
 ]
   // --no-stress leaves the wide-font pass out. The CI runs without it: its Linux fonts are already wider than
   // the ones the game was made with, so adding more makes a test of a world nobody plays in (it fails at
   // sizes where the plain pass on the same fonts is fine, and nothing like it shows on this machine).
   .filter((pass) => !(pass.css && process.argv.includes('--no-stress')))
-  // LAYOUT_ONLY="568x320" (and "wide" for the wide-font pass) checks one size, to look into a failure.
+  // --no-languages checks English only.
+  .filter((pass) => !(pass.lang !== 'en' && process.argv.includes('--no-languages')))
+  // LAYOUT_ONLY="568x320" checks one size, and LAYOUT_PASS ("plain", "wide", "de"...) one pass, to look into a failure.
   .map((pass) => ({ ...pass, sizes: pass.sizes.filter(([w, h]) => !process.env.LAYOUT_ONLY || `${w}x${h}` === process.env.LAYOUT_ONLY) }))
-  .filter((pass) => !process.env.LAYOUT_PASS || (process.env.LAYOUT_PASS === 'wide') === Boolean(pass.css));
+  .filter((pass) => !process.env.LAYOUT_PASS || process.env.LAYOUT_PASS === pass.id);
 
 for (const pass of PASSES) {
   for (const [width, height] of SIZES.filter((s) => pass.sizes.includes(s))) {
@@ -109,10 +144,15 @@ for (const pass of PASSES) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     await send('Page.bringToFront');
     // From a clean start: the saved game is cleared on a page that does not run the game (see freshGame).
-    await freshGame(`lang=en&seed=${SEED_WITH_TWIN}`);
+    await freshGame(`lang=${pass.lang}&seed=${SEED_WITH_TWIN}`);
     // Say so if the page is hidden anyway: that explains a table that never appears, or bots that never move.
     if (await evaluate('document.hidden')) note(size, 'page', 'the browser page is hidden (the check cannot run)');
     if (pass.css) await evaluate(`document.head.appendChild(Object.assign(document.createElement('style'), { textContent: ${JSON.stringify(pass.css)} }))`);
+    // The first thing a new player meets is the rules card.
+    const dialog = async (state) => {
+      for (const problem of await evaluate(MODAL_PROBE)) note(size, state, problem);
+    };
+    await dialog('rules card');
     await evaluate(`document.querySelector('[data-action="close-coach"]')?.click()`);
     await sleep(500);
 
@@ -127,6 +167,21 @@ for (const pass of PASSES) {
     const opening = await evaluate(PROBE);
     check('opening', opening);
     if (!opening.show) note(size, 'opening', 'the Show button is missing: the seeded deal is not the one expected');
+    // The first-hand guide's first step is on the status bar here, and has to be read in full (from 320 px: the
+    // two narrowest sizes are there to see that the table holds, not the words).
+    if (width >= 320 && opening.statusCut) note(size, 'opening', `the guide step is cut: "${opening.status}"`);
+
+    // The menu and the statistics: dialogs with rows of buttons, where a long word has nowhere to go.
+    const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)})?.click()`);
+    await click('[data-action="open-menu"]');
+    await sleep(200);
+    await dialog('menu');
+    await click('[data-action="open-stats"]');
+    await sleep(200);
+    await dialog('statistics');
+    await click('[data-action="close-stats"]');
+    await click('[data-action="close-menu"]');
+    await sleep(200);
 
     // The hint puts a longer text in the status bar ("Throw this one: 2 tiles from winning").
     if (await evaluate(`Boolean(document.querySelector('[data-action="hint"]'))`)) {
@@ -158,5 +213,6 @@ if (failures.length) {
   for (const f of failures) console.error(`  ${f}`);
   finish(1);
 }
-console.log(`\nLayout ok at ${SIZES.length} sizes${PASSES.some((p) => p.css) ? ', and with a wider font' : ''}.`);
+const languages = [...new Set(PASSES.map((p) => p.lang))];
+console.log(`\nLayout ok at ${SIZES.length} sizes${PASSES.some((p) => p.css) ? ', with a wider font' : ''}, in ${languages.join(', ')}.`);
 finish(0);

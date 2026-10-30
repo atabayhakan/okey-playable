@@ -1,12 +1,16 @@
-// English is required by Playables certification; Turkish is picked from ytgame.system.getLanguage().
-// Never read navigator.language: certification forbids it.
+// English is required by Playables certification; the other languages (Turkish, German, Dutch, Azerbaijani)
+// are picked from ytgame.system.getLanguage(). Never read navigator.language there: certification forbids it.
+// Each language is a file in ./lang that has to fill in every string of `Strings`.
+import { az } from './lang/az';
+import { de } from './lang/de';
+import { nl } from './lang/nl';
 
 const en = {
   langTag: 'en',
   gameTitle: 'Okey',
   you: 'You',
   botNames: ['Ali', 'Ayşe', 'Can'],
-  tiles: (n: number) => `${n} tiles`,
+  tiles: (n: number) => `${n} tile${n === 1 ? '' : 's'}`,
   points: (n: number) => `${n} pts`,
   pile: 'Pile',
   indicator: 'Indicator',
@@ -32,7 +36,7 @@ const en = {
   handValueHint: 'What your tiles are worth right now',
   meldHint: 'Complete sets and runs your hand already holds',
   coachTitle: 'How Okey works',
-  coachDraw: 'Take a tile from the pile, or the tile the player on your right threw.',
+  coachDraw: 'Take a tile from the pile, or the tile the player on your left threw.',
   coachDiscard: 'Throw one tile to your right on every turn.',
   coachSets: 'Win with sets (same number, different colours) and runs (same colour, in order), or seven pairs.',
   coachOkey: 'The tile right after the indicator is the okey: it stands in for any tile.',
@@ -150,7 +154,7 @@ const tr: Strings = {
   handValueHint: 'Eldeki taşlarının şu anki değeri',
   meldHint: 'Elinde zaten tamamlanmış per ve seriler',
   coachTitle: 'Okey nasıl oynanır',
-  coachDraw: 'Ortadan taş çek ya da sağındakinin attığı taşı al.',
+  coachDraw: 'Ortadan taş çek ya da solundakinin attığı taşı al.',
   coachDiscard: 'Her turda bir taşını sağa at.',
   coachSets: 'Per (aynı sayı, farklı renk) ve seri (aynı renk, art arda) yap, ya da yedi çift.',
   coachOkey: 'Göstergenin hemen ardındaki taş okeydir: her taşın yerini alabilir.',
@@ -169,7 +173,7 @@ const tr: Strings = {
   hintShown: (away) => (away === null ? 'Şu taşı at' : away === 0 ? 'Şu taşı at: bitiriyorsun' : `Şu taşı at: kazanmaya ${away} taş kalır`),
   difficultyLabel: 'Rakipler',
   difficulty: { easy: 'Kolay', normal: 'Normal', hard: 'Zor' },
-  tourPick: 'Bir taşa dokunup seç',
+  tourPick: 'Bir taşa dokun',
   tourDrop: 'Buraya at’a dokun',
   tourDraw: 'Ortadan taş çek',
   tourGoal: 'Per ve seri yap',
@@ -231,6 +235,11 @@ const tr: Strings = {
   and: 've',
 };
 
+/** Every language the game speaks, by its two-letter code. English is the one certification asks for. */
+export const LANGUAGES: Record<string, Strings> = { en, tr, de, nl, az };
+
+/** The strings for a language tag from the platform ('de', 'de-AT', 'nl_BE', 'az-Latn-AZ'); English when there are none. */
 export function pickStrings(language: string): Strings {
-  return language.toLowerCase().startsWith('tr') ? tr : en;
+  const primary = language.toLowerCase().split(/[-_]/)[0];
+  return LANGUAGES[primary] ?? en;
 }

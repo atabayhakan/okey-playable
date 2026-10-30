@@ -1157,6 +1157,10 @@ button.tile {
 /* Rakip zorluğu: kurallar kartının altında. */
 .difficulty {
   display: flex;
+  /* A label and three buttons do not fit side by side on a narrow phone, or in a language with long
+     words: the label gets a row of its own and the buttons stay together, on the right. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
   margin-top: 14px;
@@ -1169,6 +1173,8 @@ button.tile {
   font-weight: 700;
   color: #555;
   margin-right: auto;
+  /* Long labels ("Gegner-Tempo") wrap inside their own row instead of pushing the buttons out. */
+  max-width: 100%;
 }
 
 .difficulty .chip {

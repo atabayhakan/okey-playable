@@ -17,8 +17,10 @@ npm run assets     # store/ altındaki mağaza görsellerini yeniden üretir (Ch
 ```bash
 npm run package:web  # web derlemesi (itch.io vb.): SDK yok, kayıt tarayıcıda -> release/okey-web-v<sürüm>.zip
 npm run bench:bots   # botların gücünü ölçer: seviyeler birbirine karşı, eller kaç atışta biter (dakikalar sürer)
-npm run check:layout # web derlemesini 18 ekran boyutunda başsız Chrome/Edge ile tarar: bindirme ve taşma olmamalı
-                     # (bir de geniş yazı tipi turu; CI'da `--no-stress` ile yalnızca normal tur)
+npm run check:layout # web derlemesini 18 ekran boyutunda başsız Chrome/Edge ile tarar: bindirme ve taşma olmamalı;
+                     # menü, kurallar kartı ve istatistik diyaloglarının taşması, rehber adımının kesilmesi dahil;
+                     # Türkçe, Almanca, Felemenkçe ve Azerbaycanca için dar/geniş 7 boyutta ayrıca (--no-languages ile
+                     # yalnızca İngilizce). Bir geniş yazı tipi turu da var; CI'da `--no-stress` ile yalnızca normal tur
 npm run check:ui     # web derlemesinde arayüzden 3 el + günün elini oynar (başsız Chrome/Edge), her ekranı axe-core ve
                      # kendi kontrast hesabıyla tarar, kaydı/yeniden yüklemeyi ve belleği (yığın, DOM düğümü) denetler;
                      # sayfa hata bildirirse başarısız olur (CI'da çalışır). SMOKE_HANDS=12 ile uzun, sızıntı arayan koşu
@@ -185,6 +187,13 @@ Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü ge
   için metinler 21 karakteri geçmez ve rehber sürerken süre göstergesi çekilir.
   Rehber el bitince ya da son adımdan sonra kapanır, günün elinde çalışmaz;
   kurallar kartını daha önce okumuş oyuncular hiç görmez (`SAVE_VERSION = 9`).
+- **Diller**: İngilizce, Türkçe, Almanca, Felemenkçe ve Azerbaycanca (`src/lang/`). Dil, Playables'te
+  `ytgame.system.getLanguage()`'ten, web derlemesinde tarayıcıdan, her ikisinde `?lang=`'den (yalnızca
+  geliştirme/web) seçilir; etiketin ilk parçasına bakılır (`de-AT` → Almanca), bilinmeyen dil İngilizce olur.
+  Yeni dil eklemek için `src/lang/` altına `Strings` tipini dolduran bir dosya yazmak yeterli: tür
+  denetimi eksik anahtarı, `tests/i18n.test.ts` boş/bozuk metni ve rehber adımlarının uzunluğunu,
+  yerleşim denetimi taşmayı yakalar. Almanca, Felemenkçe ve Azerbaycanca çevirileri geliştirici
+  tarafından yazıldı; yayından önce anadili konuşan birinin okuması iyi olur.
 - **El değeri** rozeti eldeki taşların toplam değerini gösterir.
 - **Bitirme** düğmesi yalnızca bir taş seçiliyken belirir; el bitince
   "Bitir" hedefi ortaya çıkar.

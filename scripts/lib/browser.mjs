@@ -193,7 +193,13 @@ export async function launch(command) {
   const navigate = async (url) => {
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url });
-    await loaded;
+    // A page that never finishes loading is a failure to report, not a reason to wait for ever (a check once
+    // sat for two hours on one).
+    let timeout;
+    const late = new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error(`the page did not finish loading in 30 s: ${url}`)), 30_000);
+    });
+    await Promise.race([loaded, late]).finally(() => clearTimeout(timeout));
   };
 
   /**
