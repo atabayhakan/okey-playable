@@ -13,8 +13,12 @@ import type { Rack } from './rack';
  * v3: + coachSeen, so the rules card is only shown once
  * v4: + difficulty, the strength of the computer opponents
  * v5: + matchStart, coloredOkey, singleColor, the optional rules
+ * v6: + botPace, how long the opponents take over a move
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
+
+/** How long the opponents take over a move. */
+export type BotPace = 'relaxed' | 'quick';
 
 export interface Stats {
   /** Hands played and won; `won` is the score sent to YouTube. */
@@ -41,6 +45,8 @@ export interface SaveData {
   coloredOkey: boolean;
   /** A hand finished with all its tiles in one colour costs the others double. */
   singleColor: boolean;
+  /** How long the opponents take over a move. */
+  botPace: BotPace;
 }
 
 export const emptySave = (): SaveData => ({
@@ -54,6 +60,7 @@ export const emptySave = (): SaveData => ({
   matchStart: START_POINTS,
   coloredOkey: false,
   singleColor: false,
+  botPace: 'relaxed',
 });
 
 export const serializeSave = (save: SaveData): string => JSON.stringify(save);
@@ -76,6 +83,7 @@ function upgrade(data: unknown): SaveData {
   if (d.v === 2) d = v2ToV3(d);
   if (d.v === 3) d = v3ToV4(d);
   if (d.v === 4) d = v4ToV5(d);
+  if (d.v === 5) d = v5ToV6(d);
 
   const save = emptySave();
   const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
@@ -88,6 +96,7 @@ function upgrade(data: unknown): SaveData {
   save.matchStart = typeof d.matchStart === 'number' && d.matchStart > 0 ? d.matchStart : START_POINTS;
   save.coloredOkey = d.coloredOkey === true;
   save.singleColor = d.singleColor === true;
+  save.botPace = d.botPace === 'quick' ? 'quick' : 'relaxed';
   if (d.v !== SAVE_VERSION) return save;
 
   if (looksLikeMatch(d.match)) {
@@ -126,6 +135,11 @@ function v3ToV4(d: Raw): Raw {
 /** v4 had no optional rules beyond the difficulty. */
 function v4ToV5(d: Raw): Raw {
   return { ...d, v: 5, matchStart: START_POINTS, coloredOkey: false, singleColor: false };
+}
+
+/** v5 had one pace for the opponents. */
+function v5ToV6(d: Raw): Raw {
+  return { ...d, v: 6, botPace: 'relaxed' };
 }
 
 const isDifficulty = (x: unknown): x is Difficulty => x === 'easy' || x === 'normal' || x === 'hard';

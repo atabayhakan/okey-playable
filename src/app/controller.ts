@@ -20,7 +20,7 @@ import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
 import type { Motion } from './motion';
 import { arrangeMelds, arrangePairs, arrangeRuns, compactRack, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
-import { SAVE_VERSION, serializeSave, type SaveData, type Stats } from './save';
+import { SAVE_VERSION, serializeSave, type BotPace, type SaveData, type Stats } from './save';
 import type { Scheduler } from './scheduler';
 import type { Sound } from './sound';
 
@@ -37,6 +37,8 @@ const BOT_DELAY: Record<Difficulty, { draw: number; discard: number }> = {
   normal: { draw: 450, discard: 550 },
   hard: { draw: 260, discard: 340 },
 };
+/** A quick pace shortens the opponents' thinking; the tile flight still plays in full. */
+const QUICK_PACE = 0.45;
 const NOTICE_MS = 2200;
 /** How long the dealt tiles take to land on the rack. */
 const DEAL_ANIM_MS = 900;
@@ -99,6 +101,8 @@ export class Controller {
   coloredOkey = false;
   /** A hand finished with all its tiles in one colour costs the others double. */
   singleColor = false;
+  /** How long the opponents take over a move. */
+  botPace: BotPace = 'relaxed';
 
   private readonly listeners = new Set<() => void>();
   private readonly clockListeners = new Set<() => void>();
@@ -127,6 +131,7 @@ export class Controller {
     this.matchStart = save.matchStart;
     this.coloredOkey = save.coloredOkey;
     this.singleColor = save.singleColor;
+    this.botPace = save.botPace;
     // A new player gets the rules card over their first hand.
     this.coachOpen = !save.coachSeen;
     if (save.round && save.round.phase !== 'roundOver') {
@@ -355,6 +360,13 @@ export class Controller {
     this.changed();
   }
 
+  /** How long the opponents take over a move. */
+  setBotPace(pace: BotPace): void {
+    this.botPace = pace;
+    void this.persist();
+    this.changed();
+  }
+
   /** The optional rules that change what a finished hand is worth. */
   get rules(): RuleOptions {
     return { coloredOkey: this.coloredOkey, singleColor: this.singleColor };
@@ -456,6 +468,7 @@ export class Controller {
       matchStart: this.matchStart,
       coloredOkey: this.coloredOkey,
       singleColor: this.singleColor,
+      botPace: this.botPace,
     };
     try {
       await this.deps.platform.saveData(serializeSave(save));
@@ -523,7 +536,8 @@ export class Controller {
   private scheduleBot(): void {
     const r = this.round;
     if (this.cancelBot || r.phase === 'roundOver' || r.turn === HUMAN) return;
-    const delay = r.phase === 'draw' ? BOT_DELAY[this.difficulty].draw : BOT_DELAY[this.difficulty].discard;
+    const base = r.phase === 'draw' ? BOT_DELAY[this.difficulty].draw : BOT_DELAY[this.difficulty].discard;
+    const delay = this.botPace === 'quick' ? Math.round(base * QUICK_PACE) : base;
     this.cancelBot = this.deps.scheduler.after(delay, () => {
       this.cancelBot = null;
       this.botStep();

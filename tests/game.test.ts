@@ -126,6 +126,21 @@ describe('save', () => {
     expect(save.round?.indicatorShownBy).toBeNull();
   });
 
+  it('upgrades a v5 save with its hand and settings, and gives it the relaxed pace', () => {
+    const { botPace: _p, ...v5 } = { ...emptySave(), v: 5, difficulty: 'hard' as const, matchStart: 40, round: dealRound(9, 1), rack: null };
+    const save = parseSave(JSON.stringify(v5));
+    expect(save.v).toBe(SAVE_VERSION);
+    expect(save.botPace).toBe('relaxed');
+    expect(save.difficulty).toBe('hard');
+    expect(save.matchStart).toBe(40);
+    expect(save.round?.seed).toBe(9);
+  });
+
+  it('keeps a quick pace, and falls back to relaxed for a broken one', () => {
+    expect(parseSave(serializeSave({ ...emptySave(), botPace: 'quick' })).botPace).toBe('quick');
+    expect(parseSave(JSON.stringify({ ...emptySave(), botPace: 'warp' })).botPace).toBe('relaxed');
+  });
+
   it('starts fresh from empty or broken data', () => {
     expect(parseSave('')).toEqual(emptySave());
     expect(parseSave('{not json')).toEqual(emptySave());

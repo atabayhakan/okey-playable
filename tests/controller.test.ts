@@ -78,6 +78,33 @@ describe('controller', () => {
     expect(restored.difficulty).toBe('normal');
   });
 
+  it('keeps the opponents’ pace in the save, and a quick pace waits less for a bot', () => {
+    const waits = (pace: 'relaxed' | 'quick'): number => {
+      const delays: number[] = [];
+      const scheduler = new Scheduler();
+      const after = scheduler.after.bind(scheduler);
+      scheduler.after = (ms, fn) => {
+        delays.push(ms);
+        return after(ms, fn);
+      };
+      // The player starts with 15 tiles and throws one: the next move is a bot's.
+      const round = dealRound(5, HUMAN);
+      const game = new Controller(
+        { platform: platform(), scheduler, sound: new Sound(false) },
+        { ...emptySave(), round, rack: null, coachSeen: true, botPace: pace },
+        false,
+      );
+      game.setBotPace(pace);
+      delays.length = 0;
+      game.humanDiscard(game.round.hands[HUMAN].at(-1)!.id);
+      return delays.at(-1)!;
+    };
+    expect(waits('quick')).toBeLessThan(waits('relaxed'));
+    const game = makeController();
+    game.setBotPace('quick');
+    expect(game.botPace).toBe('quick');
+  });
+
   it('gives one free hint per hand, then asks for a rewarded ad', async () => {
     const ads: string[] = [];
     const game = makeController(emptySave(), platform({ requestRewardedAd: (id) => { ads.push(id); return Promise.resolve(true); } }));

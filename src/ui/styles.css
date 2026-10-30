@@ -578,6 +578,23 @@ button.discard:not(:disabled) {
   font-variant-numeric: tabular-nums;
 }
 
+/* The last tiles of the pile: the count turns amber and the pile's stack thins. */
+.pile.low .pile-count {
+  background: var(--accent);
+  color: var(--accent-ink);
+  animation: pile-low 1.6s ease-in-out infinite;
+}
+
+.pile.low .tile.back {
+  box-shadow: 1px 1px 0 #174d35, 0 6px 10px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes pile-low {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
 .indicator {
   display: flex;
   flex-direction: column;

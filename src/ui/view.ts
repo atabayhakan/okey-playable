@@ -14,6 +14,8 @@ const SEAT_AREA: Record<number, string> = { 1: 'right', 2: 'top', 3: 'left' };
 const PILE_AREA: Record<number, string> = { 0: 'br', 1: 'tr', 2: 'tl', 3: 'bl' };
 
 const DRAG_THRESHOLD_PX = 6;
+/** The pile is "running low" at this many tiles: the hand is about to be called. */
+const PILE_LOW = 12;
 /** Match lengths: the points everyone starts from. */
 const MATCH_LENGTHS: [id: 'short' | 'classic' | 'long', start: number][] = [
   ['short', 10],
@@ -444,6 +446,8 @@ export class View {
     const r = this.game.round;
     const t = this.t;
     const finishing = this.game.humanMustDiscard;
+    // The hand ends when the pile runs out: the last tiles are worth a signal.
+    const low = r.pile.length <= PILE_LOW;
     // The finish zone only exists while a tile is held: a permanent, disabled
     // circle in the middle of the table is noise that promises a move the
     // player cannot make.
@@ -453,7 +457,13 @@ export class View {
       { class: 'center' },
       h(
         'button',
-        { class: 'pile', 'data-action': 'draw', 'data-key': 'draw', disabled: !canDraw(r, HUMAN), 'aria-label': `${t.pile}: ${r.pile.length}` },
+        {
+          class: `pile${low ? ' low' : ''}`,
+          'data-action': 'draw',
+          'data-key': 'draw',
+          disabled: !canDraw(r, HUMAN),
+          'aria-label': `${t.pile}: ${r.pile.length}${low ? ` (${t.pileLow})` : ''}`,
+        },
         h('span', { class: 'tile back' }),
         h('span', { class: 'pile-count' }, String(r.pile.length)),
       ),
@@ -709,6 +719,25 @@ export class View {
           ),
         ),
       ),
+      // How long the opponents take over a move.
+      h(
+        'div',
+        { class: 'difficulty' },
+        h('span', { class: 'label' }, t.paceLabel),
+        ...(['relaxed', 'quick'] as const).map((pace) =>
+          h(
+            'button',
+            {
+              class: `chip${this.game.botPace === pace ? ' on' : ''}`,
+              'data-action': 'bot-pace',
+              'data-pace': pace,
+              'data-key': `pace-${pace}`,
+              'aria-pressed': String(this.game.botPace === pace),
+            },
+            t.pace[pace],
+          ),
+        ),
+      ),
       // How long a match runs: it applies to the next match.
       h(
         'div',
@@ -906,6 +935,9 @@ export class View {
         break;
       case 'difficulty':
         g.setDifficulty(target.dataset.level as Difficulty);
+        break;
+      case 'bot-pace':
+        g.setBotPace(target.dataset.pace === 'quick' ? 'quick' : 'relaxed');
         break;
       case 'match-length':
         g.setMatchStart(Number(target.dataset.start));
