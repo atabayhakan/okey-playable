@@ -134,6 +134,12 @@ const PASSES = [
   .filter((pass) => !(pass.css && process.argv.includes('--no-stress')))
   // --no-languages checks English only.
   .filter((pass) => !(pass.lang !== 'en' && process.argv.includes('--no-languages')))
+  // LAYOUT_SPACING_ALL=0.07 puts the wide font on every pass, other languages too: the CI's Linux fonts are wider
+  // than this machine's, and that is how a failure that only shows there can be made to show here.
+  .map((pass) => ({ ...pass, css: pass.css ?? (process.env.LAYOUT_SPACING_ALL ? `* { letter-spacing: ${process.env.LAYOUT_SPACING_ALL}em !important; }` : null) }))
+  // LAYOUT_FONT=Verdana sets every pass in that font. Verdana is about as wide as DejaVu Sans, the font the CI's
+  // Linux runner falls back to, and it is on Windows: the closest thing here to the CI's text.
+  .map((pass) => ({ ...pass, css: process.env.LAYOUT_FONT ? `${pass.css ?? ''} * { font-family: ${process.env.LAYOUT_FONT}, sans-serif !important; }` : pass.css }))
   // LAYOUT_ONLY="568x320" checks one size, and LAYOUT_PASS ("plain", "wide", "de"...) one pass, to look into a failure.
   .map((pass) => ({ ...pass, sizes: pass.sizes.filter(([w, h]) => !process.env.LAYOUT_ONLY || `${w}x${h}` === process.env.LAYOUT_ONLY) }))
   .filter((pass) => !process.env.LAYOUT_PASS || process.env.LAYOUT_PASS === pass.id);

@@ -655,7 +655,11 @@ button.discard:not(:disabled) {
 /* Gösterge düğmesi: 44px dokunma hedefi. */
 .chip.show {
   min-height: 44px;
-  padding: 4px 14px;
+  /* The pile and the indicator share a row only 136 px wide on a 320 px phone (164 px on a phone on its side):
+     a label of six letters ("Göster", "Zeigen") with 14 px of padding either side did not fit, so the
+     indicator jumped below the pile and ran into the toolbar. Narrow padding, and the touch target stays 44 px. */
+  min-width: 44px;
+  padding: 4px 8px;
   border-color: var(--accent);
   color: var(--accent);
   font-size: clamp(12px, calc(var(--btw) * 0.34), 14px);
