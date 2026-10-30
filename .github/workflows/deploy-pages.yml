@@ -37,6 +37,9 @@ jobs:
       # The layout at 18 screen sizes, in the Chrome the runner already has: nothing may overlap or
       # run off the screen.
       - run: node scripts/layout-check.mjs --no-stress
+      # Three hands and the daily deal played through the screen, an accessibility scan of every screen, the
+      # save and a reload, and the memory: any error the page reports fails it.
+      - run: node scripts/ui-smoke.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-web

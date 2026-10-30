@@ -15,9 +15,11 @@
     "test": "vitest run",
     "bench:bots": "vitest run --config vitest.bench.config.ts",
     "check:layout": "npm run build:web && node scripts/layout-check.mjs",
+    "check:ui": "npm run build:web && node scripts/ui-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "axe-core": "4.13.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"

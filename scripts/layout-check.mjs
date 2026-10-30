@@ -1,4 +1,4 @@
-// Checks the layout of the web build at many screen sizes, in headless Chrome: nothing may
+﻿// Checks the layout of the web build at many screen sizes, in headless Chrome: nothing may
 // overlap, run off the screen or make the page scroll sideways.
 //
 //   npm run check:layout        builds the web build, then checks it
@@ -10,38 +10,7 @@
 //   - the same hand with the hint showing (the longest text in the status bar), and
 //   - the player's turn to draw, with a tile waiting in front of them, after a few moves.
 // Needs Chrome or Edge (CHROME_PATH overrides the lookup). Exits 1 when a probe fails.
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, extname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const webDir = join(root, 'dist-web');
-if (!existsSync(join(webDir, 'index.html'))) {
-  console.error('dist-web/ is missing. Run npm run check:layout, or npm run build:web first.');
-  process.exit(1);
-}
-
-const chromePath = [
-  process.env.CHROME_PATH,
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  '/usr/bin/google-chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-]
-  .filter(Boolean)
-  .find((p) => existsSync(p));
-if (!chromePath) {
-  console.error('No Chrome found. Set CHROME_PATH and run again.');
-  process.exit(1);
-}
+import { launch, sleep } from './lib/browser.mjs';
 
 /** Seed 9 deals the first hand with the twin of the indicator in the player's hand. */
 const SEED_WITH_TWIN = 9;
@@ -54,124 +23,7 @@ const SIZES = [
 /** The draw state needs the bots to play a few moves, which takes seconds: only these sizes. */
 const DRAW_STATE_SIZES = new Set(['280x320', '360x640', '390x844', '420x247', '568x320', '667x375', '844x390', '1280x720']);
 
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
-const server = createServer((req, res) => {
-  // A page of the same origin that does not run the game: where the saved game is cleared, so that no
-  // game that is still running can write its save back after it.
-  if (req.url === '/blank') {
-    res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>blank</title>');
-    return;
-  }
-  const path = join(webDir, req.url === '/' || req.url?.startsWith('/?') ? 'index.html' : (req.url ?? '').split('?')[0]);
-  if (!path.startsWith(webDir) || !existsSync(path)) {
-    res.writeHead(404).end();
-    return;
-  }
-  res.writeHead(200, { 'content-type': TYPES[extname(path)] ?? 'application/octet-stream' }).end(readFileSync(path));
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const base = `http://127.0.0.1:${server.address().port}/`;
-
-const port = 9400 + Math.floor(Math.random() * 300);
-const chrome = spawn(
-  chromePath,
-  [
-    '--headless=new',
-    '--disable-gpu',
-    '--no-sandbox',
-    '--hide-scrollbars',
-    '--no-first-run',
-    // A headless page that has been navigated a lot is treated as a background one, and its timers (the
-    // bots' waits among them) are slowed down: a check that is slow and flaky for no reason of the game's.
-    '--disable-background-timer-throttling',
-    '--disable-renderer-backgrounding',
-    '--disable-backgrounding-occluded-windows',
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${mkdtempSync(join(tmpdir(), 'okey-layout-'))}`,
-    'about:blank',
-  ],
-  { stdio: 'ignore' },
-);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const finish = (code) => {
-  chrome.kill();
-  server.close();
-  process.exit(code);
-};
-
-let target;
-for (let i = 0; i < 100 && !target; i++) {
-  try {
-    target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
-  } catch {
-    /* still starting */
-  }
-  if (!target) await sleep(150);
-}
-if (!target) {
-  console.error('Chrome did not start.');
-  finish(1);
-}
-
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => {
-  ws.addEventListener('open', res, { once: true });
-  ws.addEventListener('error', rej, { once: true });
-});
-let nextId = 0;
-const pending = new Map();
-const waiting = new Map();
-let crashed = false;
-ws.addEventListener('message', (ev) => {
-  const msg = JSON.parse(ev.data);
-  if (msg.method === 'Inspector.targetCrashed') crashed = true;
-  if (msg.id && pending.has(msg.id)) {
-    const { resolve, reject, method } = pending.get(msg.id);
-    pending.delete(msg.id);
-    msg.error ? reject(new Error(`${method}: ${JSON.stringify(msg.error)}`)) : resolve(msg.result);
-  } else if (msg.method && waiting.has(msg.method)) {
-    waiting.get(msg.method).splice(0).forEach((fn) => fn(msg.params));
-  }
-});
-const send = (method, params = {}) =>
-  new Promise((resolve, reject) => {
-    const id = ++nextId;
-    pending.set(id, { resolve, reject, method });
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-const once = (method) => new Promise((resolve) => waiting.set(method, [...(waiting.get(method) ?? []), resolve]));
-/** Runs code in the page. A page that does not answer in a minute is hung: that is a failure, not a wait. */
-const evaluate = async (expression) => {
-  const answer = send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-  let timeout;
-  const timer = new Promise((_, reject) => {
-    timeout = setTimeout(async () => {
-      // Stop the page where it is and say where that is: a hung page is a bug worth finding.
-      let where = '';
-      try {
-        const paused = once('Debugger.paused');
-        await send('Debugger.enable');
-        await send('Debugger.pause');
-        const stop = await Promise.race([paused, new Promise((r) => setTimeout(r, 5000, null))]);
-        where = stop ? '\n  ' + stop.callFrames.slice(0, 8).map((f) => `${f.functionName || '(anonymous)'} ${f.url.split('/').pop()}:${f.location.lineNumber + 1}`).join('\n  ') : ' (it could not be paused)';
-      } catch {
-        where = ' (no stack)';
-      }
-      reject(new Error(`the page did not answer in 60 s; running ${expression.slice(0, 60).replace(/\s+/g, ' ')}...${where}`));
-    }, 60_000);
-  });
-  const r = await Promise.race([answer, timer]).finally(() => clearTimeout(timeout));
-  if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'evaluate failed');
-  return r.result.value;
-};
-
-await send('Page.enable');
-await send('Runtime.enable');
-await send('Inspector.enable');
-// A headless page that has been navigated a lot ends up "hidden": requestAnimationFrame stops (the game
-// waits for a frame to start) and the web build pauses itself, as it should for a hidden tab. Keep it visible.
-await send('Emulation.setFocusEmulationEnabled', { enabled: true });
-await send('Page.bringToFront');
+const { send, evaluate, freshGame, hasCrashed, finish, close } = await launch('check:layout');
 
 /**
  * In the page: which parts of the table overlap, run off the screen, or make the page wider than
@@ -256,16 +108,8 @@ for (const pass of PASSES) {
     const size = `${pass.name}${width}x${height}`;
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     await send('Page.bringToFront');
-    // The saved game is cleared on a page that does not run the game: on the game's own page, the game
-    // that is still running would write its save back after the clear (the CI runner is slow enough to show it).
-    let loaded = once('Page.loadEventFired');
-    await send('Page.navigate', { url: `${base}blank` });
-    await loaded;
-    await evaluate('localStorage.clear()');
-    loaded = once('Page.loadEventFired');
-    await send('Page.navigate', { url: `${base}?lang=en&seed=${SEED_WITH_TWIN}` });
-    await loaded;
-    for (let t = 0; t < 60 && !(await evaluate(`Boolean(document.querySelector('.table'))`)); t++) await sleep(150);
+    // From a clean start: the saved game is cleared on a page that does not run the game (see freshGame).
+    await freshGame(`lang=en&seed=${SEED_WITH_TWIN}`);
     // Say so if the page is hidden anyway: that explains a table that never appears, or bots that never move.
     if (await evaluate('document.hidden')) note(size, 'page', 'the browser page is hidden (the check cannot run)');
     if (pass.css) await evaluate(`document.head.appendChild(Object.assign(document.createElement('style'), { textContent: ${JSON.stringify(pass.css)} }))`);
@@ -300,7 +144,7 @@ for (const pass of PASSES) {
       if (reached) check('draw', await evaluate(PROBE));
       else if (!handOver) note(size, 'draw', 'the bots never gave the turn back');
     }
-    if (crashed) {
+    if (hasCrashed()) {
       note(size, 'crash', 'the page crashed');
       break;
     }
@@ -308,7 +152,7 @@ for (const pass of PASSES) {
   }
 }
 
-ws.close();
+close();
 if (failures.length) {
   console.error(`\n${failures.length} problem(s):`);
   for (const f of failures) console.error(`  ${f}`);

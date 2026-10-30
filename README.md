@@ -19,7 +19,15 @@ npm run package:web  # web derlemesi (itch.io vb.): SDK yok, kayıt tarayıcıda
 npm run bench:bots   # botların gücünü ölçer: seviyeler birbirine karşı, eller kaç atışta biter (dakikalar sürer)
 npm run check:layout # web derlemesini 18 ekran boyutunda başsız Chrome/Edge ile tarar: bindirme ve taşma olmamalı
                      # (bir de geniş yazı tipi turu; CI'da `--no-stress` ile yalnızca normal tur)
+npm run check:ui     # web derlemesinde arayüzden 3 el + günün elini oynar (başsız Chrome/Edge), her ekranı axe-core ve
+                     # kendi kontrast hesabıyla tarar, kaydı/yeniden yüklemeyi ve belleği (yığın, DOM düğümü) denetler;
+                     # sayfa hata bildirirse başarısız olur (CI'da çalışır). SMOKE_HANDS=12 ile uzun, sızıntı arayan koşu
 ```
+
+Arayüz denetimleri `scripts/lib/browser.mjs` ortak modülünü kullanır (Chrome'u açar, `dist-web/`'i sunar).
+Erişilebilirlik taramasında renk kontrastını axe kararlaştıramaz (keçe ve taş yüzleri gradyan); bu yüzden
+`ui-smoke.mjs` yazıyı arkasındaki katmanlarla birleştirip kontrastı kendisi hesaplar (yazı 4,5:1, büyük yazı ve
+taşlardaki takım işaretleri 3:1).
 
 Botlar ve ölçümleri: [docs/BOTS.md](docs/BOTS.md). `?seed=<sayı>` (yalnızca `npm run dev` ve web derlemesi)
 ilk eli o tohumla dağıtır; yerleşim kontrolü ve hata ayıklama için.
