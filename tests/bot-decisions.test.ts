@@ -3,6 +3,9 @@ import { botPlanDiscard, botWantsDiscard, tuning, type Difficulty } from '../src
 import { dealRound, previousSeat, type RoundState } from '../src/core/game';
 import type { Color, Face, Tile } from '../src/core/tile';
 
+/** Only what the timing test needs; the project does not pull in the Node typings. */
+declare const process: { cpuUsage(previous?: { user: number; system: number }): { user: number; system: number } };
+
 let nextId = 9000;
 const n = (color: Color, value: number): Tile => ({ id: nextId++, kind: 'number', color, value });
 const run = (color: Color, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => n(color, from + i));
@@ -131,17 +134,20 @@ describe('the bots are cheap enough to run on a phone', () => {
 
   for (const level of ['normal', 'hard'] as Difficulty[]) {
     it(`${level} decides quickly`, () => {
-      // The best of three runs: a busy machine slows one run, not all three.
+      // CPU time of this process, not the clock on the wall: the other test files run beside this one,
+      // and a busy machine stretches the wall clock (76 ms was seen for a decision that takes 30 alone)
+      // without making the search itself any slower. The best of three runs still drops a stray hiccup.
       let best = Infinity;
       for (let run = 0; run < 3; run++) {
-        const start = performance.now();
+        const start = process.cpuUsage();
         let decisions = 0;
         for (let seed = 1; seed <= 25; seed++) {
           const r = dealRound(seed, 0);
           botPlanDiscard(r, 0, level);
           decisions++;
         }
-        best = Math.min(best, (performance.now() - start) / decisions);
+        const used = process.cpuUsage(start);
+        best = Math.min(best, (used.user + used.system) / 1000 / decisions);
       }
       expect(best).toBeLessThan(limitMs[level]!);
     });
