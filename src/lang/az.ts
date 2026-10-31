@@ -79,6 +79,8 @@ export const az: Strings = {
   statFastest: 'Ən sürətli qələbə',
   statTurns: (n) => `${n} gediş`,
   statDrawn: 'Heç-heçə əllər',
+  paletteLabel: 'Daş rəngləri',
+  palette: { standard: 'Standart', colorblind: 'Rəng korluğu' },
   paceLabel: 'Rəqib sürəti',
   pace: { relaxed: 'Rahat', quick: 'Sürətli' },
   pileLow: 'azalır',

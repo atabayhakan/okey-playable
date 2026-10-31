@@ -194,6 +194,13 @@ Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü ge
   denetimi eksik anahtarı, `tests/i18n.test.ts` boş/bozuk metni ve rehber adımlarının uzunluğunu,
   yerleşim denetimi taşmayı yakalar. Almanca, Felemenkçe ve Azerbaycanca çevirileri geliştirici
   tarafından yazıldı; yayından önce anadili konuşan birinin okuması iyi olur.
+- **Renk körü paleti** (Menü → Taş renkleri): kırmızı `#82111b`, sarı `#845e00`, mavi `#1160b7`,
+  siyah `#111111` ve büyütülmüş, dolu takım işaretleri (● ▲ ■ ◆); şekil rengi renksiz de söyler.
+  Palet tahmin değil ölçümle seçildi: protanopi, deuteranopi ve tritanopi simülasyonunda (Machado 2009)
+  dört rengin en yakın çifti 22 ΔE (CIE76) uzakta; standart palette deuteranoplar kırmızı ile sarıyı
+  yalnızca 7 ΔE ayrık görür. Her renk taş yüzünde 4,5:1 kontrastı korur. `tests/palette.test.ts` her iki
+  paleti stil dosyasından okuyup bunu ölçer; duman testi paleti açıp masayı yeniden tarar
+  (`SAVE_VERSION = 10`).
 - **El değeri** rozeti eldeki taşların toplam değerini gösterir.
 - **Bitirme** düğmesi yalnızca bir taş seçiliyken belirir; el bitince
   "Bitir" hedefi ortaya çıkar.

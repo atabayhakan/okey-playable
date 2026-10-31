@@ -84,6 +84,8 @@ export const nl: Strings = {
   statFastest: 'Snelste winst',
   statTurns: (n) => `${n} ${n === 1 ? 'beurt' : 'beurten'}`,
   statDrawn: 'Onbeslist',
+  paletteLabel: 'Steenkleuren',
+  palette: { standard: 'Standaard', colorblind: 'Kleurenblind' },
   paceLabel: 'Hun tempo',
   pace: { relaxed: 'Rustig', quick: 'Snel' },
   pileLow: 'raakt op',

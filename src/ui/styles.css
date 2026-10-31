@@ -1021,6 +1021,23 @@ details.menu[open] > summary {
   opacity: 0.85;
 }
 
+/* The colour-blind set (Menu > Tile colours). Chosen by simulating protanopia, deuteranopia and tritanopia
+   (Machado 2009) and keeping each colour in its own family: the closest two of the four are 22 apart (CIE76)
+   as seen with protanopia, where the standard set has deuteranopes seeing red and yellow 7 apart. Every
+   colour keeps 4.7:1 or more on the tile face (tests/palette.test.ts measures both). The shape of the mark,
+   which says the colour without colour, is bigger and solid. */
+#app[data-palette='colorblind'] {
+  --red: #82111b;
+  --yellow: #845e00;
+  --blue: #1160b7;
+  --black: #111111;
+}
+
+#app[data-palette='colorblind'] .tile .mark {
+  font-size: 0.6em;
+  opacity: 1;
+}
+
 /* Marks the okey (wild) so players don't have to work it out from the indicator. */
 .tile.wild::after {
   content: '';

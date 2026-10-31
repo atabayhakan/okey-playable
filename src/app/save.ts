@@ -17,8 +17,12 @@ import type { Rack } from './rack';
  * v7: + stats streak, bestStreak, pairsWon, okeyWon, fastestWin, drawn (the statistics screen)
  * v8: + daily, dailyDate, parked: the daily deal and the match hand set aside while it is played
  * v9: + tutorial, how far the first-hand guide has got (TUTORIAL_DONE once it is over)
+ * v10: + palette, the colours of the tiles
  */
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
+
+/** The colours of the tiles: the standard ones, or a set made to tell apart for people who see colours differently. */
+export type Palette = 'standard' | 'colorblind';
 
 /**
  * The first-hand guide: 0 the first throw, 1 the first draw, 2 the second throw,
@@ -107,6 +111,8 @@ export interface SaveData {
   parked: ParkedHand | null;
   /** How far the first-hand guide has got; TUTORIAL_DONE when it is over. */
   tutorial: number;
+  /** The colours of the tiles. */
+  palette: Palette;
 }
 
 export const emptySave = (): SaveData => ({
@@ -125,6 +131,7 @@ export const emptySave = (): SaveData => ({
   dailyDate: null,
   parked: null,
   tutorial: 0,
+  palette: 'standard',
 });
 
 export const serializeSave = (save: SaveData): string => JSON.stringify(save);
@@ -151,6 +158,7 @@ function upgrade(data: unknown): SaveData {
   if (d.v === 6) d = v6ToV7(d);
   if (d.v === 7) d = v7ToV8(d);
   if (d.v === 8) d = v8ToV9(d);
+  if (d.v === 9) d = v9ToV10(d);
 
   const save = emptySave();
   const stats = (isObject(d.stats) ? d.stats : {}) as Raw;
@@ -171,6 +179,7 @@ function upgrade(data: unknown): SaveData {
   save.coloredOkey = d.coloredOkey === true;
   save.singleColor = d.singleColor === true;
   save.botPace = d.botPace === 'quick' ? 'quick' : 'relaxed';
+  save.palette = d.palette === 'colorblind' ? 'colorblind' : 'standard';
   // A current save with a step nobody can name counts as finished: a guide that cannot be shown is better skipped.
   const step = d.tutorial;
   const knownStep = typeof step === 'number' && Number.isInteger(step) && step >= 0 && step < TUTORIAL_DONE;
@@ -246,6 +255,11 @@ function v7ToV8(d: Raw): Raw {
 /** v8 had no guide: a player who has read the rules card has had their start already. */
 function v8ToV9(d: Raw): Raw {
   return { ...d, v: 9, tutorial: d.coachSeen === true ? TUTORIAL_DONE : 0 };
+}
+
+/** v9 had one set of tile colours. */
+function v9ToV10(d: Raw): Raw {
+  return { ...d, v: 10, palette: 'standard' };
 }
 
 const isDifficulty = (x: unknown): x is Difficulty => x === 'easy' || x === 'normal' || x === 'hard';

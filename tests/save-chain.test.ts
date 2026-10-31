@@ -45,6 +45,7 @@ const full = (): SaveData => ({
   botPace: 'quick',
   daily: { lastDate: 20261029, lastWon: true, played: 4, won: 3, streak: 2, best: 2 },
   tutorial: TUTORIAL_DONE,
+  palette: 'colorblind',
 });
 
 /** What the save looked like in `version`: the later fields taken out. */
@@ -52,6 +53,7 @@ function asVersion(version: number): Record<string, unknown> {
   const raw = JSON.parse(serializeSave(full())) as Record<string, any>;
   raw.v = version;
   const drop = (...keys: string[]) => keys.forEach((k) => delete raw[k]);
+  if (version < 10) drop('palette');
   if (version < 9) drop('tutorial');
   if (version < 8) drop('daily', 'dailyDate', 'parked');
   if (version < 7) for (const k of ['streak', 'bestStreak', 'pairsWon', 'okeyWon', 'fastestWin', 'drawn']) delete raw.stats[k];
@@ -98,6 +100,7 @@ describe('a save from every earlier version', () => {
       expect(save.stats.bestStreak).toBe(had(7) ? 3 : 0);
       expect(save.stats.fastestWin).toBe(had(7) ? 7 : 0);
       expect(save.daily).toEqual(had(8) ? current.daily : emptySave().daily);
+      expect(save.palette).toBe(had(10) ? 'colorblind' : 'standard');
       expect(save.dailyDate).toBeNull();
       expect(save.parked).toBeNull();
       // Everybody here had read the rules, so nobody is walked through the first hand.
@@ -121,7 +124,9 @@ describe('a save from every earlier version', () => {
   });
 
   it('a player who had not closed the rules card is still walked through the first hand', () => {
-    for (let version = 3; version < SAVE_VERSION; version++) {
+    // Before v9 there was no guide to have finished: it starts for whoever had not closed the card. A save of v9 or
+    // later says for itself how far the guide has got.
+    for (let version = 3; version < 9; version++) {
       const raw = asVersion(version);
       raw.coachSeen = false;
       expect(parseSave(JSON.stringify(raw)).tutorial).toBe(0);

@@ -32,7 +32,7 @@ import type { Tile } from '../core/tile';
 import type { Platform } from '../platform/playables';
 import type { Motion } from './motion';
 import { arrangeMelds, arrangePairs, arrangeRuns, compactRack, moveTile, placeTile, reconcileRack, removeTile, type Rack } from './rack';
-import { SAVE_VERSION, serializeSave, TUTORIAL_DONE, type BotPace, type DailyStats, type ParkedHand, type SaveData, type Stats } from './save';
+import { SAVE_VERSION, serializeSave, TUTORIAL_DONE, type BotPace, type DailyStats, type Palette, type ParkedHand, type SaveData, type Stats } from './save';
 import type { Scheduler } from './scheduler';
 import type { Sound } from './sound';
 
@@ -122,6 +122,8 @@ export class Controller {
   singleColor = false;
   /** How long the opponents take over a move. */
   botPace: BotPace = 'relaxed';
+  /** The colours of the tiles. */
+  palette: Palette = 'standard';
   /** The daily deal's results. */
   daily: DailyStats;
   /** The day of the daily deal being played, or null while the hand belongs to the match. */
@@ -159,6 +161,7 @@ export class Controller {
     this.coloredOkey = save.coloredOkey;
     this.singleColor = save.singleColor;
     this.botPace = save.botPace;
+    this.palette = save.palette;
     this.daily = { ...save.daily };
     this.tutorial = save.tutorial;
     // A new player gets the rules card over their first hand.
@@ -406,6 +409,13 @@ export class Controller {
     this.changed();
   }
 
+  /** The colours of the tiles. */
+  setPalette(palette: Palette): void {
+    this.palette = palette;
+    void this.persist();
+    this.changed();
+  }
+
   /** How long the opponents take over a move. */
   setBotPace(pace: BotPace): void {
     this.botPace = pace;
@@ -613,6 +623,7 @@ export class Controller {
       dailyDate: this.dailyDate,
       parked: this.parked,
       tutorial: this.tutorial,
+      palette: this.palette,
     };
     try {
       await this.deps.platform.saveData(serializeSave(save));

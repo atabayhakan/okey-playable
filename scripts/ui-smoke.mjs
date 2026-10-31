@@ -212,6 +212,19 @@ async function setUp(scanScreens) {
   await click('[data-action="close-menu"]');
   await sleep(200);
   if (await exists('.modal')) fail('menu', 'the menu did not close');
+
+  if (scanScreens) {
+    // The colour-blind tile colours: the same table, scanned and its contrast measured with them on, then back.
+    for (const palette of ['colorblind', 'standard']) {
+      await click('[data-action="open-menu"]');
+      await sleep(200);
+      await click(`[data-action="palette"][data-palette="${palette}"]`);
+      await click('[data-action="close-menu"]');
+      await sleep(300);
+      if (!(await exists(`#app[data-palette="${palette}"]`))) fail('palette', `choosing the ${palette} colours did not change the table`);
+      if (palette === 'colorblind') await scan('table, colour-blind');
+    }
+  }
 }
 
 /**
@@ -311,7 +324,8 @@ const saved = JSON.parse((await evaluate(`localStorage.getItem('okey-save') || '
 if (!saved) {
   fail('save', 'nothing was saved');
 } else {
-  if (saved.v !== 9) fail('save', `the save is version ${saved.v}, not 9`);
+  if (saved.v !== 10) fail('save', `the save is version ${saved.v}, not 10`);
+  if (saved.palette !== 'standard') fail('save', `the save has the ${saved.palette} tile colours, not the standard ones`);
   if (saved.stats.played !== HANDS) fail('save', `the save counts ${saved.stats.played} hands played, not ${HANDS}`);
   if (saved.daily.played !== 1) fail('save', `the save counts ${saved.daily.played} daily deals played, not 1`);
   if (saved.dailyDate !== null) fail('save', 'the save still has the daily deal on the table');

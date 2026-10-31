@@ -147,6 +147,8 @@ export class View {
       const element = this.motionSource(motion);
       return element ? { element, rect: rectOf(element) } : null;
     });
+    // The tile colours are set from CSS variables under this attribute.
+    this.root.dataset.palette = this.game.palette;
     const focusedKey = (document.activeElement as HTMLElement | null)?.dataset?.key;
     const modal = this.game.round.phase === 'roundOver' ? this.resultModal() : null;
     const coach = this.game.coachOpen ? this.coach() : null;
@@ -835,6 +837,25 @@ export class View {
           ),
         ),
       ),
+      // The colours of the tiles: the standard set, or one made to tell apart for colour-blind players.
+      h(
+        'div',
+        { class: 'difficulty' },
+        h('span', { class: 'label' }, t.paletteLabel),
+        ...(['standard', 'colorblind'] as const).map((palette) =>
+          h(
+            'button',
+            {
+              class: `chip${this.game.palette === palette ? ' on' : ''}`,
+              'data-action': 'palette',
+              'data-palette': palette,
+              'data-key': `palette-${palette}`,
+              'aria-pressed': String(this.game.palette === palette),
+            },
+            t.palette[palette],
+          ),
+        ),
+      ),
       // How long a match runs: it applies to the next match.
       h(
         'div',
@@ -1069,6 +1090,9 @@ export class View {
         break;
       case 'difficulty':
         g.setDifficulty(target.dataset.level as Difficulty);
+        break;
+      case 'palette':
+        g.setPalette(target.dataset.palette === 'colorblind' ? 'colorblind' : 'standard');
         break;
       case 'bot-pace':
         g.setBotPace(target.dataset.pace === 'quick' ? 'quick' : 'relaxed');

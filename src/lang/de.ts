@@ -84,6 +84,8 @@ export const de: Strings = {
   statFastest: 'Schnellster Sieg',
   statTurns: (n) => `${n} ${n === 1 ? 'Zug' : 'Züge'}`,
   statDrawn: 'Unentschieden',
+  paletteLabel: 'Steinfarben',
+  palette: { standard: 'Standard', colorblind: 'Farbenblind' },
   paceLabel: 'Gegner-Tempo',
   pace: { relaxed: 'Gemütlich', quick: 'Flott' },
   pileLow: 'wird knapp',

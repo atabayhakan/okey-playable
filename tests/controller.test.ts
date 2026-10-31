@@ -134,6 +134,15 @@ describe('controller', () => {
     expect(game.hintTileId).toBeNull();
   });
 
+  it('keeps the tile colours in the save, and falls back to the standard ones for anything else', () => {
+    const game = makeController();
+    expect(game.palette).toBe('standard');
+    game.setPalette('colorblind');
+    expect(game.palette).toBe('colorblind');
+    expect(makeController(parseSave(serializeSave({ ...emptySave(), palette: 'colorblind' }))).palette).toBe('colorblind');
+    expect(makeController(parseSave(JSON.stringify({ ...emptySave(), palette: 'neon' }))).palette).toBe('standard');
+  });
+
   it('keeps the optional rules in the save', () => {
     const game = makeController();
     game.setMatchStart(40);
