@@ -24,6 +24,9 @@ npm run check:layout # web derlemesini 18 ekran boyutunda başsız Chrome/Edge i
 npm run check:ui     # web derlemesinde arayüzden 3 el + günün elini oynar (başsız Chrome/Edge), her ekranı axe-core ve
                      # kendi kontrast hesabıyla tarar, kaydı/yeniden yüklemeyi ve belleği (yığın, DOM düğümü) denetler;
                      # sayfa hata bildirirse başarısız olur (CI'da çalışır). SMOKE_HANDS=12 ile uzun, sızıntı arayan koşu
+npm run check:pwa    # web derlemesi uygulama gibi çalışıyor mu: Chrome "kurulabilir" diyor mu, manifest ve simgeler doğru mu,
+                     # service worker derlemenin tüm dosyalarını tutuyor mu, ağ kapalıyken oyun açılıp oynanıyor mu;
+                     # Playables derlemesinde bunlardan hiçbiri olmamalı (CI'da çalışır)
 ```
 
 Arayüz denetimleri `scripts/lib/browser.mjs` ortak modülünü kullanır (Chrome'u açar, `dist-web/`'i sunar).
@@ -201,6 +204,14 @@ Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü ge
   yalnızca 7 ΔE ayrık görür. Her renk taş yüzünde 4,5:1 kontrastı korur. `tests/palette.test.ts` her iki
   paleti stil dosyasından okuyup bunu ölçer; duman testi paleti açıp masayı yeniden tarar
   (`SAVE_VERSION = 10`).
+- **Uygulama olarak kurulabilir, çevrimdışı çalışır (yalnızca web derlemesi)**: manifest, simgeler ve bir
+  service worker (`scripts/pwa-plugin.mjs`, Vite eklentisi, yalnızca `--mode web`). Worker derlemenin tüm
+  dosyalarını kurulumda tutar, önbellekten yanıtlar (`?lang=de` gibi adreslerle de), yeni derlemede eski
+  önbelleği siler; sürüm içeriğin karmasıdır. Tüm yollar göreli, yani GitHub Pages'te ve itch.io'da çalışır.
+  Playables derlemesi service worker kullanmamalı: `check-bundle.mjs` ve paketleme betiği bunu denetler.
+  Simgeler mağaza simgesinden üretilir (`node scripts/make-icons.mjs`, yalnızca simge değişince). Yeni
+  sürüm yayınlanınca ilk açılışta eski sürüm görünür, bir sonraki açılışta yenisi gelir (worker yeni
+  dosyaları arka planda indirip devralır; açık bir el yeniden yüklenmez).
 - **El değeri** rozeti eldeki taşların toplam değerini gösterir.
 - **Bitirme** düğmesi yalnızca bir taş seçiliyken belirir; el bitince
   "Bitir" hedefi ortaya çıkar.

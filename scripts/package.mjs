@@ -31,6 +31,11 @@ if (!existsSync(join(dist, 'index.html'))) {
   if (web && html.includes('youtube.com')) problems.push('the web build still loads the YouTube SDK');
   if (web && !code.includes('okey-save')) problems.push('the web build does not save to the browser');
   if (!web && code.includes('okey-save')) problems.push('the Playables build contains the browser save');
+  // The web build is an installable app that works offline; the Playables bundle must not be (and the web one must).
+  const app = ['sw.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'].filter((f) => existsSync(join(dist, f)));
+  if (web && app.length !== 4) problems.push(`the web build is missing app files (it has ${app.join(', ') || 'none'})`);
+  if (web && !html.includes('manifest.webmanifest')) problems.push('the web build does not link its manifest');
+  if (!web && (app.length || code.includes('serviceWorker') || html.includes('manifest'))) problems.push('the Playables bundle contains the web build’s app files');
   if (problems.length) {
     console.error(problems.join('\n'));
     process.exit(1);

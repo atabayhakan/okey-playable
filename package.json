@@ -16,6 +16,7 @@
     "bench:bots": "vitest run --config vitest.bench.config.ts",
     "check:layout": "npm run build:web && node scripts/layout-check.mjs",
     "check:ui": "npm run build:web && node scripts/ui-smoke.mjs",
+    "check:pwa": "npm run build:web && node scripts/pwa-check.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

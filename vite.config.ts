@@ -1,5 +1,6 @@
 import type { Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { pwa } from './scripts/pwa-plugin.mjs';
 
 /** The web build is not inside YouTube: leave out the Playables SDK, it would only be a request to youtube.com. */
 const withoutPlayablesSdk = (mode: string): Plugin => ({
@@ -9,7 +10,8 @@ const withoutPlayablesSdk = (mode: string): Plugin => ({
 });
 
 export default defineConfig(({ mode }) => ({
-  plugins: [withoutPlayablesSdk(mode)],
+  // The web build is also an installable app that works offline; the Playables build is not (see scripts/pwa-plugin.mjs).
+  plugins: [withoutPlayablesSdk(mode), pwa(mode)],
   // Playables are served from a path YouTube chooses, so every asset URL must be relative.
   base: './',
   server: { port: 5180, strictPort: true },

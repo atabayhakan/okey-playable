@@ -5,6 +5,7 @@ import { Scheduler } from './app/scheduler';
 import { Sound } from './app/sound';
 import { pickStrings } from './i18n';
 import { createPlatform } from './platform/playables';
+import { registerServiceWorker } from './platform/pwa';
 import { View } from './ui/view';
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -71,6 +72,8 @@ async function boot(): Promise<void> {
   await nextFrame();
   platform.gameReady();
   game.begin();
+  // Offline play and installing: the web build only (a build-time constant, so the Playables build has no trace of it).
+  if (import.meta.env.MODE === 'web') registerServiceWorker();
 }
 
 void boot();

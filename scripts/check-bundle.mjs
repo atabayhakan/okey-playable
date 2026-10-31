@@ -34,6 +34,11 @@ for (const f of files) {
   else if (f.size > 512 * KiB) warnings.push(`${f.name} is ${fmt(f.size)} (recommended under 512 KiB)`);
 }
 
+// The web build's app files (manifest, icons, service worker) have no place in the Playables bundle.
+for (const f of files) {
+  if (f.name === 'sw.js' || f.name.endsWith('.webmanifest') || f.name.startsWith('icons/')) errors.push(`${f.name} is a file of the web build (an installable app), not of the Playables bundle`);
+}
+
 // The SDK must load before any game code.
 const html = readFileSync(join(dist, 'index.html'), 'utf8');
 const firstScript = html.match(/<script\b[^>]*>/)?.[0] ?? '';
@@ -46,6 +51,7 @@ const banned = [
   ['indexedDB', 'save progress only with ytgame.game.saveData'],
   ['navigator.language', 'use ytgame.system.getLanguage'],
   ['visibilitychange', 'use ytgame.system.onPause / onResume'],
+  ['serviceWorker', 'only the web build is installable and offline: the PWA code must not be in the Playables build'],
   ['new Worker', 'Web Workers may block review'],
   ['WebAssembly', 'WebAssembly may block review'],
   ['eval(', 'eval may block review'],

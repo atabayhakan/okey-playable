@@ -40,6 +40,9 @@ jobs:
       # Three hands and the daily deal played through the screen, an accessibility scan of every screen, the
       # save and a reload, and the memory: any error the page reports fails it.
       - run: node scripts/ui-smoke.mjs
+      # The web build as an app: Chrome finds it installable, the worker keeps the whole build, and it plays with
+      # the network off. The Playables build (built above) must have none of it.
+      - run: node scripts/pwa-check.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-web
