@@ -88,6 +88,12 @@ export async function launch(command) {
       // The page left behind by a navigation would otherwise stay alive in the back/forward cache, and its
       // memory and nodes would be counted with the new page's (a check of the game's memory reads twice too much).
       '--disable-features=BackForwardCache',
+      // Edge puts scripts of its own into some pages (its built-in extensions): they add a few megabytes of heap and
+      // a dozen listeners to a reading, and report their own errors ("A listener indicated an asynchronous response
+      // by returning true...") as if they were the game's. None of it is the game's.
+      '--disable-extensions',
+      '--disable-component-extensions-with-background-pages',
+      '--no-default-browser-check',
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${mkdtempSync(join(tmpdir(), 'okey-check-'))}`,
       'about:blank',
@@ -125,14 +131,18 @@ export async function launch(command) {
   let crashed = false;
   /** What the page reported as wrong, with the page's own words. */
   const errors = [];
+  /** The scripts of the page itself run in a default context; an extension's run in an isolated one of their own. */
+  const foreign = new Set();
   ws.addEventListener('message', (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.method === 'Inspector.targetCrashed') crashed = true;
+    if (msg.method === 'Runtime.executionContextCreated' && msg.params.context.auxData?.isDefault === false) foreign.add(msg.params.context.id);
     if (msg.method === 'Runtime.exceptionThrown') {
       const d = msg.params.exceptionDetails;
-      errors.push(`uncaught: ${d.exception?.description ?? d.text}`);
+      // Not the game's: a browser extension that put a script in the page.
+      if (!foreign.has(d.executionContextId)) errors.push(`uncaught: ${d.exception?.description ?? d.text}`);
     }
-    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
+    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error' && !foreign.has(msg.params.executionContextId)) {
       errors.push(`console.error: ${msg.params.args.map((a) => a.value ?? a.description ?? '').join(' ')}`);
     }
     if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') {

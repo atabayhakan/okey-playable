@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => ({
     // The bot tests play whole hands, and the hard bot searches a lot: on a loaded machine (or a CI
     // runner) the default five seconds is far too little, and thirty was not enough either.
     testTimeout: 120_000,
-    // bench/ is run on its own with `npm run bench:bots`.
-    exclude: [...configDefaults.exclude, 'bench/**'],
+    // bench/ is run on its own with `npm run bench:bots`, and the timing tests alone after the rest (`npm test`).
+    exclude: [...configDefaults.exclude, 'bench/**', 'tests/timing/**'],
   },
 }));

@@ -42,6 +42,11 @@ const fail = (where, problem) => failures.push(`${where}: ${problem}`);
 const log = (line) => console.log(line);
 
 await send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: HEIGHT, deviceScaleFactor: 1, mobile: false });
+// SMOKE_NO_WORKER=1 lets the page ignore its service worker, to tell what the worker adds to a reading.
+if (process.env.SMOKE_NO_WORKER) {
+  await send('Network.enable');
+  await send('Network.setBypassServiceWorker', { bypass: true });
+}
 
 // ---- Helpers in the page ------------------------------------------------------------------------
 
@@ -168,12 +173,21 @@ async function memory() {
   // out of (through its parent): a flight still going when the sample is taken reads as a few hundred nodes of
   // leak. Ending them first leaves only what the game keeps by mistake.
   await evaluate('document.getAnimations().forEach((a) => a.cancel())');
-  await send('HeapProfiler.collectGarbage');
-  await sleep(300);
-  await send('HeapProfiler.collectGarbage');
-  const { metrics } = await send('Performance.getMetrics');
+  // The browser frees the nodes of a redraw some collections after the game let go of them (the count after one
+  // or two varied between 220 and 1700 from run to run, with nothing different in the game). What a leak keeps
+  // survives any number of collections: the reading is the lowest of four, a pause between each.
+  let metrics = [];
+  let documents = 0;
+  for (let round = 0; round < 4; round++) {
+    await send('HeapProfiler.collectGarbage');
+    await sleep(500);
+    const now = (await send('Performance.getMetrics')).metrics;
+    if (round === 0 || now.find((m) => m.name === 'Nodes')?.value < metrics.find((m) => m.name === 'Nodes')?.value) {
+      metrics = now;
+      documents = (await send('Memory.getDOMCounters')).documents;
+    }
+  }
   const get = (name) => metrics.find((m) => m.name === name)?.value ?? 0;
-  const documents = (await send('Memory.getDOMCounters')).documents;
   // What the page is made of, for when the node count grows: the most common classes in the DOM.
   const census = await evaluate(`(() => {
     const count = {};

@@ -8,7 +8,7 @@ TypeScript + Vite ile, motor kullanmadan (DOM) yazıldı.
 ```bash
 npm install
 npm run dev        # http://localhost:5180  (?lang=tr, ?audio=off)
-npm test           # kurallar, botlar, kayıt
+npm test           # kurallar, botlar, kayıt, diller, palet, PWA; sonra zamanlama testleri tek başına (test:unit yalnızca ilki)
 npm run build      # typecheck + build + Playables bundle denetimi
 npm run package    # build + release/okey-playable-v<sürüm>.zip (portala yüklenecek paket)
 npm run assets     # store/ altındaki mağaza görsellerini yeniden üretir (Chrome ister)
