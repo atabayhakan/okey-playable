@@ -38,7 +38,8 @@ Botlar ve ölçümleri: [docs/BOTS.md](docs/BOTS.md). `?seed=<sayı>` (yalnızca
 ilk eli o tohumla dağıtır; yerleşim kontrolü ve hata ayıklama için.
 
 YouTube'a yükleme durumu ve adımları: [docs/YOUTUBE_PLAYABLES.md](docs/YOUTUBE_PLAYABLES.md) ·
-itch.io: [docs/ITCH.md](docs/ITCH.md)
+itch.io: [docs/ITCH.md](docs/ITCH.md) ·
+tanıtım metinleri ve bağış adımları (taslak, hiçbiri gönderilmedi): [docs/TANITIM.md](docs/TANITIM.md)
 
 ## Puanlama (klasik "20'den düşme")
 
