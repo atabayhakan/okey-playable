@@ -151,7 +151,7 @@ Portalın istediği ölçüleri yalnızca portal yazıyor; başka bir ölçü ge
 | Her en-boy oranı, yön kilidi yok | `View.fit()`: ıstaka ekran genişliğine göre sütun sayısını kendi ayarlar; dikeyde 3-4 satır, yatayda 1-2 satır |
 | Dokunma + fare (+ klavye) | Pointer Events; ←/→ taş seçer, Tab/Enter ile her şey kullanılabilir |
 | Esc engellenmez | `View.onKey` |
-| Harici istek, dış font, giriş ekranı, dış link yok | Sistem fontu; ağ çağrısı yok |
+| Harici istek, dış font, giriş ekranı, dış link yok | Yazı tipi pakette (Plus Jakarta Sans, OFL, `@fontsource-variable`); ağ çağrısı yok |
 | Reklam yalnızca `ytgame.ads`, doğal molada | El arası interstitial (her 2 elde bir) |
 | `sendScore` = kayıttaki skor | Kazanılan el sayısı |
 | Worker / WebAssembly / eval / localStorage yok | Build denetimi kontrol eder |

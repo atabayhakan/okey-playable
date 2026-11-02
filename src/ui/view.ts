@@ -300,7 +300,8 @@ export class View {
                   'aria-label': this.t.hintLabel,
                   title: this.game.hintCostsAd ? this.t.hintAdLabel : this.t.hintLabel,
                 },
-                this.game.hintCostsAd ? `${this.t.hint} 🎬` : this.t.hint,
+                // The ad's mark is drawn by the CSS (`.hint-button.ad`): no emoji on the table.
+                this.t.hint,
               )
             : null,
         ),

@@ -1,34 +1,63 @@
-/* System fonts only: Playables may not load anything from outside YouTube. */
+/* Görünüm: "modern kıraathane" (docs/DESIGN.md). Derin yeşil çuha, pirinç çizgili ceviz ıstaka, fildişi taşlar.
+   Tek ışık kaynağı yukarıdan ve hafif önden gelir: her gölge aşağı düşer (x = 0), her parlama üst kenardadır.
+   Tek vurgu rengi pirinç/amber: dokunulabilen ve "sıra sende" olan her şey.
+   Yazı tipi paketin içinde (Plus Jakarta Sans, OFL, src/main.ts içe aktarır): Playables dışarıdan hiçbir şey
+   yükleyemez. Türkçe, Azerbaycanca (ə Ə), Almanca ve Felemenkçe (ĳ) glifleri yazı tipinde var. */
 :root {
-  /* Masa: radyal ışık havuzu + koyu vinyet */
-  --felt-hi: #1f6144;
-  --felt-mid: #14402e;
-  --felt-lo: #0a2318;
-  --wood-hi: #a9713c;
-  --wood-lo: #5b3519;
+  /* Masa: radyal ışık havuzu + koyu vinyet. --felt-mid / --felt-lo = scripts/pwa-plugin.mjs THEME / BACKGROUND. */
+  --felt-hi: #1b5a3f;
+  --felt-mid: #113a29;
+  --felt-lo: #071c13;
 
-  /* Taş malzemesi */
-  --tile-face: #f4eddc;
-  --tile-face-hi: #fffbf0;
-  --tile-edge: #d8c9a6;
-  --tile-side: #b9a57e;
+  /* Ceviz ıstaka ve üstündeki pirinç çizgi */
+  --wood-hi: #74492b;
+  --wood-mid: #52321c;
+  --wood-lo: #2f1b0e;
+  --brass: #d6a94f;
+  --brass-hi: #f3d68e;
+  --brass-deep: #9b7128;
 
-  /* Metin - hepsi WCAG AA (4.5:1) veya üstü */
-  --ink: #f7f3e8;
-  --ink-dim: #c3cfc4;
-  --ink-faint: #9db3a6;
+  /* Taş malzemesi: fildişi yüz (en koyu ton #efe5d0, ui-smoke.mjs ve palette.test.ts bunu ölçer) */
+  --tile-face: #f6eedd;
+  --tile-face-hi: #fffbf2;
+  --tile-edge: #d9caa6;
+  --tile-side: #c9b58c;
+  --tile-back-hi: #2e7356;
+  --tile-back-lo: #1b4c38;
 
-  --accent: #ffc94a;
-  --accent-ink: #0a2318;
+  /* Metin - hepsi WCAG AA (4.5:1) veya üstü, çuhanın en açık tonunda bile */
+  --ink: #f4ecd8;
+  --ink-dim: #c7d2c6;
+  --ink-faint: #a8bcae;
+
+  --accent: #f0c463;
+  --accent-rgb: 240, 196, 99;
+  --accent-ink: #24190a;
   --danger: #e2603f;
+  /* Tamamlanmış per/seri: vurgu değil, durum. Sakin bir adaçayı yeşili. */
+  --done: #8fd3a6;
+  --focus: #fff4d6;
 
-  /* Taş renkleri - ivory üzerinde AA */
+  /* Kağıt: modallar ve kartlar */
+  --paper: #fffbf2;
+  --paper-lo: #f5eedf;
+  --paper-sunk: #f1e8d4;
+  --paper-line: #e4d9c1;
+  --paper-ink: #2b2318;
+  --paper-ink-dim: #5e5244;
+  --paper-ink-faint: #6d604f;
+
+  /* Taş renkleri - fildişi üzerinde AA */
   --red: #b3261e;
   --yellow: #9a5500;
   --blue: #1b4fa8;
   --black: #1c1c1e;
   /* The star of the fake okey: 5.4:1 on the tile's darkest shade (#2e7d32 was 4.1:1, below AA). */
   --fake: #266a2a;
+
+  /* Bir yazı ailesi, iki rol: arayüz (500-700) ve taş rakamları / başlıklar (800). */
+  --font-ui: 'Plus Jakarta Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
 
   --tile-w: 40px;
   --btw: 32px;
@@ -47,7 +76,8 @@ body {
   overflow: hidden;
   background: var(--felt-lo);
   color: var(--ink);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
@@ -64,8 +94,10 @@ button {
   color: inherit;
 }
 
-button:focus-visible {
-  outline: 3px solid #fff;
+/* Klavye odağı: her etkileşimli öğede aynı belirgin halka (kağıt üzerinde koyu, bkz. .modal). */
+button:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -76,29 +108,58 @@ button:focus-visible {
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 20px;
-  background: radial-gradient(ellipse at 50% 40%, var(--felt-hi), var(--felt-lo) 72%);
+  gap: 28px;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 42%, rgba(255, 236, 190, 0.08), transparent 70%),
+    radial-gradient(ellipse at 50% 42%, var(--felt-hi), var(--felt-mid) 55%, var(--felt-lo) 85%);
 }
 
+/* Üç taşlık yelpaze: ortada "O", arkada iki kapalı taş. */
+.splash .fan {
+  display: grid;
+  place-items: center;
+}
+
+.splash .fan > .tile {
+  grid-area: 1 / 1;
+}
+
+/* Yüzü açık taş öndedir; kapalılar arkasından iki yana açılır. */
+.splash .fan > .tile:not(.back) {
+  z-index: 1;
+  /* Takım işareti yok: harf taşın ortasında. */
+  justify-content: center;
+  padding: 0;
+}
+
+.splash .fan > .back:first-child {
+  transform: translateX(-42%) rotate(-12deg);
+}
+
+.splash .fan > .back:last-child {
+  transform: translateX(42%) rotate(12deg);
+}
+
+/* Yükleme noktaları yerine ince bir nabız: pirinç bir ışık çizgi boyunca gider. */
 .dots {
-  display: flex;
-  gap: 8px;
+  position: relative;
+  width: 72px;
+  height: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .dots i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ink-dim);
-  animation: blink 1s ease-in-out infinite;
+  display: none;
 }
 
-.dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.dots i:nth-child(3) {
-  animation-delay: 0.3s;
+.dots::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: splash-pulse 1.4s ease-in-out infinite;
 }
 
 /* ---- Table --------------------------------------------------------------- */
@@ -126,23 +187,32 @@ button:focus-visible {
   gap: 6px;
   padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
     max(8px, env(safe-area-inset-left));
-  /* Işık havuzu + kenar vinyeti: göz masada kalır. */
+  /* Lambanın ışık havuzu masanın üst-ortasında; kenarlar vinyetle kararır, göz masada kalır. */
   background:
-    radial-gradient(ellipse 70% 55% at 50% 32%, rgba(255, 255, 255, 0.07), transparent 70%),
-    radial-gradient(ellipse at 50% 35%, var(--felt-hi), var(--felt-mid) 58%, var(--felt-lo) 82%);
+    radial-gradient(ellipse 65% 50% at 50% 30%, rgba(255, 236, 190, 0.075), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 34%, var(--felt-hi), var(--felt-mid) 55%, var(--felt-lo) 88%);
   position: relative;
 }
 
-/* Keçe dokusu: harici istek yok, sadece gradyan. */
+/* Çuha dokusu: ince bir dokuma, harici görsel yok, yalnızca gradyan. */
 .table::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.35;
+  opacity: 0.5;
   background:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 4px),
-    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.03) 0 2px, transparent 2px 4px);
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 3px);
+}
+
+/* Kenar vinyeti: köşeler masanın dışında kalan karanlık. */
+.table::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.45);
 }
 
 .board {
@@ -158,6 +228,7 @@ button:focus-visible {
   gap: calc(var(--btw) * 0.2);
   min-height: 0;
   position: relative;
+  z-index: 1;
 }
 
 .board .tile {
@@ -187,27 +258,56 @@ button:focus-visible {
   gap: 2px;
   text-align: center;
   font-size: clamp(13px, calc(var(--btw) * 0.4), 15px);
+  /* Satır yüksekliği sabit: view.ts'deki yerleşim hesabı koltuğun iki metin satırına güvenir. */
+  line-height: 1.25;
 }
 
+/* Monogram: her botun kendi koyu tonu, harf fildişi. Ali ile Ayşe aynı harfle başlar; tonları ayırır. */
 .avatar {
+  --tone: #2f4a3e;
+  --tone-hi: #46685a;
   width: calc(var(--btw) * 1.15);
   aspect-ratio: 1;
   border-radius: 50%;
   display: grid;
   place-items: center;
+  font-size: clamp(13px, calc(var(--btw) * 0.48), 24px);
   font-weight: 800;
-  background: rgba(255, 255, 255, 0.14);
-  border: 2px solid transparent;
+  line-height: 1;
+  color: var(--ink);
+  background-color: var(--tone);
+  background-image: radial-gradient(circle at 50% 28%, var(--tone-hi), var(--tone) 68%);
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 3px 6px rgba(0, 0, 0, 0.35);
   transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.seat.right .avatar {
+  --tone: #642a26;
+  --tone-hi: #7d3b33;
+}
+
+.seat.top .avatar {
+  --tone: #45304f;
+  --tone-hi: #5b4369;
+}
+
+.seat.left .avatar {
+  --tone: #1f3f5a;
+  --tone-hi: #2c5574;
 }
 
 .seat.active .avatar {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(255, 201, 74, 0.22);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.2), 0 3px 6px rgba(0, 0, 0, 0.35);
 }
 
 .seat .name {
   font-weight: 700;
+}
+
+.seat.active .name {
+  color: var(--accent);
 }
 
 .seat .meta {
@@ -234,24 +334,27 @@ button:focus-visible {
   align-items: center;
   gap: 8px;
   padding: 4px 6px 4px 12px;
-  border-radius: 999px;
+  border-radius: 16px;
   text-align: center;
   font-size: 13px;
   line-height: 1.25;
   font-weight: 500;
   color: var(--ink-dim);
-  background: rgba(6, 24, 16, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(3px);
+  /* Masaya oturmuş koyu bir levha: cam efekti yok. */
+  background: rgba(5, 18, 12, 0.86);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.35);
   /* Metin only: masadaki taşlar tıklanabilir kalmalı. */
   pointer-events: none;
-  animation: status-in 0.18s ease-out;
+  animation: status-in 0.22s var(--ease);
 }
 
 .status-text {
   flex: 1 1 auto;
   min-width: 0;
+  /* Two lines of about the same length, not a long line and a lone word. The longhand: the shorthand `text-wrap`
+     would also reset the wrap mode, and undo the single line (nowrap) of the compact and landscape bars. */
+  text-wrap-style: balance;
 }
 
 /* İpucu düğmesi durum çubuğunun içinde: masada yeni bir düğme yok. */
@@ -260,22 +363,33 @@ button:focus-visible {
   pointer-events: auto;
   min-height: 36px;
   padding: 4px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--accent);
-  background: rgba(255, 201, 74, 0.14);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.7);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--accent);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
 .hint-button:hover {
-  background: rgba(255, 201, 74, 0.26);
+  background: rgba(var(--accent-rgb), 0.24);
 }
 
-/* Reklamla gelen ipucu: aynı düğme, küçük bir işaret. */
+/* Reklamla gelen ipucu: aynı düğme, küçük bir "oynat" üçgeni (emoji değil, çizim). */
 .hint-button.ad {
   border-style: dashed;
+}
+
+.hint-button.ad::after {
+  content: '';
+  display: inline-block;
+  margin-left: 6px;
+  border-style: solid;
+  border-width: 0.32em 0 0.32em 0.52em;
+  border-color: transparent transparent transparent currentColor;
+  vertical-align: 0.02em;
 }
 
 .status:empty {
@@ -290,14 +404,14 @@ button:focus-visible {
 .status.notice {
   font-weight: 700;
   color: var(--accent);
-  border-color: rgba(255, 201, 74, 0.45);
-  background: rgba(6, 24, 16, 0.85);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(5, 18, 12, 0.92);
 }
 
 .status.invalidFinish {
   color: #ffd9cd;
   border-color: var(--danger);
-  background: rgba(52, 12, 6, 0.85);
+  background: rgba(52, 12, 6, 0.9);
 }
 
 /* Yatay mod: üç satır sığmıyor, masa iki satıra ve beş sütuna iner. */
@@ -350,6 +464,7 @@ button:focus-visible {
   min-height: 32px;
   padding: 3px 10px;
   font-size: 12px;
+  border-radius: 10px;
 }
 
 [data-compact] .chip.help {
@@ -364,6 +479,7 @@ button:focus-visible {
   gap: 6px;
   padding: 2px 4px 2px 10px;
   font-size: 12px;
+  border-radius: 12px;
   /* Tek satır: sarılan bir çubuk, kendine ayrılan satırı aşıp masaya biner. */
   white-space: nowrap;
 }
@@ -377,6 +493,7 @@ button:focus-visible {
   min-height: 28px;
   padding: 2px 10px;
   font-size: 12px;
+  border-radius: 9px;
 }
 
 [data-compact] .seat {
@@ -425,6 +542,7 @@ button:focus-visible {
   min-height: 24px;
   padding: 2px 8px;
   font-size: 10px;
+  border-radius: 8px;
 }
 
 /* Deste sayacı yığının altından sarkıp araç çubuğuna girmesin. */
@@ -473,6 +591,7 @@ button:focus-visible {
 
 /* ---- Discards, pile, indicator, finish ------------------------------------ */
 
+/* Atılan taş yeri: çuhaya hafifçe gömülü bir yuva. Kenarlık kalınlığı (2 px) ölçüye dahil, değişmez. */
 .discard {
   justify-self: center;
   align-self: center;
@@ -481,16 +600,18 @@ button:focus-visible {
   padding: 0;
   display: grid;
   place-items: center;
-  border-radius: 8px;
-  border: 2px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  border: 2px dashed rgba(255, 255, 255, 0.16);
   background: rgba(0, 0, 0, 0.1);
+  transition: background 0.15s, border-color 0.15s, transform 0.15s var(--ease);
 }
 
 /* Dolu yığın düz çerçeveli: kesikli çizgi boş yer imi sanılıyor. */
 .discard:not(.empty) {
   border-style: solid;
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Boş atış yığını tamamen görünmez: hedef olmadıkça üç boş kutu masada gürültü. */
@@ -511,10 +632,10 @@ button.discard:not(:disabled) {
 }
 
 .discard.target {
-  border-style: solid;
-  border-color: rgba(255, 201, 74, 0.75);
-  background: rgba(255, 201, 74, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(255, 201, 74, 0.18);
+  border-style: dashed;
+  border-color: rgba(var(--accent-rgb), 0.8);
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.16);
 }
 
 /* The first-hand guide lights up what the step is about. An outline takes no room, so the layout
@@ -539,7 +660,7 @@ button.discard:not(:disabled) {
 
 @keyframes tour-pulse {
   50% {
-    outline-color: rgba(255, 201, 74, 0.25);
+    outline-color: rgba(var(--accent-rgb), 0.25);
   }
 }
 
@@ -554,7 +675,8 @@ button.discard:not(:disabled) {
   color: var(--accent);
   text-align: center;
   line-height: 1.15;
-  padding: 0 4px;
+  letter-spacing: -0.02em;
+  padding: 0 2px;
   /* Küçük ekranda yığın dar: tek satır kalsa etiket ekranın kenarından taşar. Sığmazsa sarılır. */
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -567,7 +689,7 @@ button.discard:not(:disabled) {
 
 .discard.hover,
 .finish.hover {
-  background: rgba(255, 201, 74, 0.28);
+  background: rgba(var(--accent-rgb), 0.28);
   transform: scale(1.04);
 }
 
@@ -594,13 +716,21 @@ button.discard:not(:disabled) {
   cursor: pointer;
 }
 
+/* Deste: taşlar üst üste, katmanlar aşağı doğru (ışık yukarıdan). */
 .pile .tile.back {
-  box-shadow: 2px 2px 0 #174d35, 4px 4px 0 #123d2a, 0 6px 10px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 0 #1a4433,
+    0 3px 0 rgba(0, 0, 0, 0.35),
+    0 5px 0 #163a2c,
+    0 6px 0 rgba(0, 0, 0, 0.35),
+    0 10px 12px rgba(0, 0, 0, 0.4);
 }
 
 .pile:not(:disabled) .tile.back {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
+  animation: ring-pulse 1.6s ease-in-out infinite;
 }
 
 .pile-count {
@@ -612,21 +742,25 @@ button.discard:not(:disabled) {
   min-width: 24px;
   padding: 2px 6px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.7);
+  background: #0a1d14;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
 /* The last tiles of the pile: the count turns amber and the pile's stack thins. */
 .pile.low .pile-count {
   background: var(--accent);
+  border-color: var(--brass-deep);
   color: var(--accent-ink);
   animation: pile-low 1.6s ease-in-out infinite;
 }
 
 .pile.low .tile.back {
-  box-shadow: 1px 1px 0 #174d35, 0 6px 10px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 0 #1a4433, 0 3px 0 rgba(0, 0, 0, 0.35), 0 8px 10px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes pile-low {
@@ -644,6 +778,8 @@ button.discard:not(:disabled) {
 
 .caption {
   font-size: clamp(12px, calc(var(--btw) * 0.34), 14px);
+  font-weight: 600;
+  line-height: 1.2;
   color: var(--ink-dim);
 }
 
@@ -652,7 +788,7 @@ button.discard:not(:disabled) {
   font-weight: 700;
 }
 
-/* Gösterge düğmesi: 44px dokunma hedefi. */
+/* Gösterge düğmesi: 44px dokunma hedefi. Pirinç dolgu: masadaki en önemli tek seferlik hamle. */
 .chip.show {
   min-height: 44px;
   /* The pile and the indicator share a row only 136 px wide on a 320 px phone (164 px on a phone on its side):
@@ -660,11 +796,18 @@ button.discard:not(:disabled) {
      indicator jumped below the pile and ran into the toolbar. Narrow padding, and the touch target stays 44 px. */
   min-width: 44px;
   padding: 4px 8px;
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--brass-deep);
+  background: var(--accent) linear-gradient(180deg, var(--brass-hi), var(--accent) 60%);
+  color: var(--accent-ink);
   font-size: clamp(12px, calc(var(--btw) * 0.34), 14px);
+  font-weight: 800;
   line-height: 1.2;
+  box-shadow: 0 2px 0 var(--brass-deep), 0 4px 8px rgba(0, 0, 0, 0.3);
   animation: glow 1.6s ease-in-out infinite;
+}
+
+.chip.show:hover {
+  background: var(--brass-hi);
 }
 
 /* Bitir alanı yalnızca hedef olduğunda görünür (bağlamsal). */
@@ -678,15 +821,17 @@ button.discard:not(:disabled) {
   border: 2px dashed rgba(255, 255, 255, 0.34);
   background: rgba(0, 0, 0, 0.18);
   color: var(--ink);
-  font-weight: 700;
+  font-weight: 800;
   font-size: clamp(13px, calc(var(--btw) * 0.34), 15px);
-  animation: finish-in 0.15s ease-out;
+  animation: finish-in 0.22s var(--ease);
+  transition: background 0.15s, transform 0.15s var(--ease);
 }
 
 .finish.target {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(255, 201, 74, 0.14);
+  background: rgba(var(--accent-rgb), 0.12);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
 
@@ -698,14 +843,15 @@ button.discard:not(:disabled) {
 
 /* ---- Hand value badge --------------------------------------------------- */
 
+/* Bilgi levhaları: dokunulmaz, bu yüzden çerçevesiz ve düğmelerden sakin. */
 .hand-value {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 12px;
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
@@ -719,7 +865,7 @@ button.discard:not(:disabled) {
 .hand-value b {
   color: var(--ink);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 /* Tamamlanmış per ve seri sayısı. */
@@ -728,29 +874,29 @@ button.discard:not(:disabled) {
   align-items: baseline;
   gap: 3px;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 12px;
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }
 
 .meld-count.has {
-  color: #b9f0cf;
-  border-color: rgba(120, 220, 160, 0.4);
-  background: rgba(20, 70, 45, 0.45);
+  color: var(--done);
+  border-color: rgba(143, 211, 166, 0.35);
+  background: rgba(10, 48, 30, 0.6);
 }
 
 .meld-count b {
   color: var(--ink);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 /* Per ve seriye giren taşlar yeşil bir halkayla işaretlenir. */
 .tile.melded {
-  outline: 2px solid rgba(122, 222, 160, 0.75);
+  outline: 2px solid rgba(98, 186, 132, 0.85);
   outline-offset: -3px;
 }
 
@@ -762,8 +908,8 @@ button.discard:not(:disabled) {
 }
 
 @keyframes hint-pulse {
-  0%, 100% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 1px 0 rgba(0, 0, 0, 0.28), 0 3px 7px rgba(0, 0, 0, 0.3); }
-  50% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 1px 0 rgba(0, 0, 0, 0.28), 0 0 0 6px rgba(255, 201, 74, 0.35), 0 3px 7px rgba(0, 0, 0, 0.3); }
+  0%, 100% { box-shadow: var(--tile-shadow); }
+  50% { box-shadow: var(--tile-shadow), 0 0 0 6px rgba(var(--accent-rgb), 0.35); }
 }
 
 /* ---- Toolbar and rack ------------------------------------------------------ */
@@ -775,6 +921,8 @@ button.discard:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 6px;
+  position: relative;
+  z-index: 2;
 }
 
 .tools {
@@ -783,21 +931,25 @@ button.discard:not(:disabled) {
   align-items: center;
 }
 
-/* Sıralama düğmeleri tek bir "Düzenle" menüsünde. */
+/* Düğme: çuhanın üstünde koyu bir levha, üst kenarı ışık alır. Sıralama düğmeleri tek bir "Düzenle" menüsünde. */
 .chip {
   min-height: 44px;
   padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.28);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(4, 16, 10, 0.55) linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 2px 4px rgba(0, 0, 0, 0.28);
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
 .chip:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(var(--accent-rgb), 0.45);
 }
 
 details.menu {
@@ -807,6 +959,8 @@ details.menu {
 details.menu > summary {
   list-style: none;
   cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 details.menu > summary::-webkit-details-marker {
@@ -814,7 +968,8 @@ details.menu > summary::-webkit-details-marker {
 }
 
 details.menu[open] > summary {
-  background: rgba(255, 255, 255, 0.14);
+  background-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--accent-rgb), 0.6);
 }
 
 .menu-list {
@@ -827,26 +982,29 @@ details.menu[open] > summary {
   gap: 4px;
   padding: 6px;
   border-radius: 12px;
-  background: rgba(10, 35, 24, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  background: #0b2419;
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 12px 28px rgba(0, 0, 0, 0.55);
   min-width: 132px;
 }
 
 .menu-list .chip {
   background: transparent;
   border-color: transparent;
+  box-shadow: none;
   text-align: left;
   justify-content: flex-start;
 }
 
 .menu-list .chip:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background-color: rgba(var(--accent-rgb), 0.12);
+  border-color: transparent;
 }
 
 .score {
   margin-left: auto;
   font-size: 14px;
+  font-weight: 600;
   color: var(--ink-dim);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -855,46 +1013,66 @@ details.menu[open] > summary {
   text-overflow: ellipsis;
 }
 
-/* Yardım düğmesi: kare, kısa. */
+/* Menü düğmesi: kare, kısa. Üç çizgi CSS ile çizilir; glif yazı tipine göre değişiyordu. Metin (☰)
+   düğümde kalır ama görünmez; adı aria-label'da. */
 .chip.help {
+  position: relative;
   min-width: 44px;
   padding: 6px 0;
   text-align: center;
-  font-weight: 800;
+  font-size: 0;
+  color: var(--ink);
 }
 
-/* Menü: yeni maç düğmesi öne çıksın. */
-.modal .new-match {
+.chip.help::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+}
+
+/* The daily deal sits above the match button, as a prize rather than a setting: the primary action of the menu. */
+.modal .daily {
   display: block;
   width: 100%;
-  margin-top: 14px;
+  margin-top: 16px;
   min-height: 48px;
-  border-color: #1f6f4a;
-  background: #1f6f4a;
-  color: #fff;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent) linear-gradient(180deg, var(--brass-hi), var(--accent) 55%, var(--brass) 100%);
+  color: var(--accent-ink);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 800;
+  box-shadow: 0 2px 0 var(--brass-deep), 0 6px 12px rgba(80, 55, 15, 0.22);
 }
 
-.modal .new-match:hover {
-  background: #185c3e;
+.modal .daily:hover:not(:disabled) {
+  background: var(--brass-hi);
 }
 
-/* The daily deal sits above the match button, as a prize rather than a setting. */
-.modal .daily {
+/* Yeni maç: ikincil (çerçeveli), ama tam genişlikte. */
+.modal .new-match {
   display: block;
   width: 100%;
   margin-top: 12px;
   min-height: 48px;
-  border-color: #b8860b;
-  background: #ffc94a;
-  color: #0a2318;
+  border: 1px solid #b89a5e;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 1px 0 rgba(120, 90, 40, 0.18);
+  color: var(--paper-ink);
   font-size: 16px;
   font-weight: 700;
 }
 
-.modal .daily:hover:not(:disabled) {
-  background: #f5bb2b;
+.modal .new-match:hover:not(:disabled) {
+  background: #fbf1da;
 }
 
 .modal .daily:disabled,
@@ -910,15 +1088,18 @@ details.menu[open] > summary {
   font-weight: 700;
   color: var(--ink-faint);
   padding-right: 8px;
-  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 /* ıstaka: yalnızca dolu yuvalar çizilir, boş kutular gürültü yaratmaz.
    Izgara yarım taşlık tracklerden kurulur: taş iki track, grup arası boşluk bir
-   track kaplar. Böylece on beş taş dört yerine üç satıra sığar. */
+   track kaplar. Böylece on beş taş dört yerine üç satıra sığar.
+   Ceviz: mat, hafif damarlı; üst kenarda pirinç bir çizgi; her taş sırasının altında bir basamak
+   (gerçek ıstaka gibi). Hepsi gölge ve gradyan: dolgu ve kenarlık view.ts'deki rackHeight ile aynı kalır. */
 .rack {
   --gapw: calc(var(--tile-w) * 0.04);
   --track: calc((var(--tile-w) - var(--gapw)) / 2);
+  --row: calc(var(--tile-w) * 1.46);
   justify-self: center;
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--track));
@@ -929,8 +1110,33 @@ details.menu[open] > summary {
   width: 100%;
   padding: calc(var(--tile-w) * 0.22) calc(var(--tile-w) * 0.28);
   border-radius: calc(var(--tile-w) * 0.25);
-  background: linear-gradient(180deg, var(--wood-hi), var(--wood-lo));
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.18), inset 0 -3px 0 rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.4);
+  background-color: var(--wood-mid);
+  background-image:
+    /* Işık yukarıdan: üst yarı hafif aydınlık. */
+    linear-gradient(180deg, rgba(255, 222, 170, 0.12), rgba(255, 222, 170, 0) 40%, rgba(0, 0, 0, 0.18)),
+    /* Basamaklar: her sıranın altında koyu bir oluk ve ışık alan ince bir kenar. */
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 calc(var(--tile-w) * 1.24),
+      rgba(0, 0, 0, 0.32) calc(var(--tile-w) * 1.24) calc(var(--tile-w) * 1.38),
+      rgba(255, 214, 160, 0.16) calc(var(--tile-w) * 1.38) calc(var(--tile-w) * 1.4),
+      transparent calc(var(--tile-w) * 1.4) var(--row)
+    ),
+    /* Damar: hafif eğik, düzensiz aralıklı ince çizgiler. */
+    repeating-linear-gradient(93deg, rgba(0, 0, 0, 0.07) 0 1px, transparent 1px 9px, rgba(255, 210, 160, 0.04) 9px 11px, transparent 11px 23px),
+    repeating-linear-gradient(88deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 37px),
+    linear-gradient(180deg, var(--wood-hi), var(--wood-mid) 55%, var(--wood-lo));
+  /* The steps start where the first row of tiles does (the padding), and run the whole width. */
+  background-origin: border-box, padding-box, border-box, border-box, border-box;
+  background-position: 0 0, 0 calc(var(--tile-w) * 0.22), 0 0, 0 0, 0 0;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 2px 0 var(--brass),
+    inset 0 3px 0 rgba(255, 236, 190, 0.35),
+    inset 0 4px 4px rgba(0, 0, 0, 0.3),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.35),
+    0 3px 0 #1f1209,
+    0 12px 24px rgba(0, 0, 0, 0.5);
   max-width: 100%;
 }
 
@@ -942,7 +1148,7 @@ details.menu[open] > summary {
 }
 
 .slot.hover {
-  background: rgba(255, 201, 74, 0.4);
+  background: rgba(var(--accent-rgb), 0.4);
 }
 
 /* Grup arası boşluk: ince bir ayırıcı, perlerin sınırını görünür kılar. */
@@ -956,11 +1162,11 @@ details.menu[open] > summary {
   content: '';
   position: absolute;
   left: 50%;
-  top: 14%;
-  bottom: 14%;
+  top: 16%;
+  bottom: 22%;
   width: 1px;
   transform: translateX(-50%);
-  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  background: linear-gradient(180deg, transparent, rgba(var(--accent-rgb), 0.35), transparent);
 }
 
 /* Boş yuvalar hedef olarak tam taş genişliğinde yer tutar. */
@@ -970,43 +1176,49 @@ details.menu[open] > summary {
 
 /* ---- Tiles ------------------------------------------------------------------ */
 
+/* Fildişi taş: pahlı kenar (içteki çerçeve), kalınlık bandı, temas çizgisi ve aşağı düşen yumuşak gölge.
+   Rakamlar ağır ve geometrik; renk yalnızca rakamda ve işarette. */
 .tile {
+  --tile-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(120, 92, 45, 0.16),
+    0 calc(var(--tile-w) * 0.07) 0 var(--tile-side),
+    0 calc(var(--tile-w) * 0.07 + 1px) 0 rgba(70, 50, 20, 0.45),
+    0 calc(var(--tile-w) * 0.12) calc(var(--tile-w) * 0.16) rgba(0, 0, 0, 0.34);
   position: relative;
   grid-column: span 2;
   width: var(--tile-w);
   height: calc(var(--tile-w) * 1.38);
   margin: 0;
-  padding: calc(var(--tile-w) * 0.13) 0 0;
+  padding: calc(var(--tile-w) * 0.14) 0 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: calc(var(--tile-w) * 0.03);
+  gap: calc(var(--tile-w) * 0.02);
   border: 1px solid var(--tile-edge);
   border-radius: calc(var(--tile-w) * 0.16);
-  /* Fildişi yüz: üstte ışık, altta gölge. */
-  background: linear-gradient(180deg, var(--tile-face-hi) 0%, var(--tile-face) 46%, #efe5d0 100%);
-  /* Kenar bandı + temas gölgesi + yönlü gölge. */
-  box-shadow:
-    0 calc(var(--tile-w) * 0.075) 0 var(--tile-side),
-    0 1px 0 rgba(0, 0, 0, 0.28),
-    0 3px 7px rgba(0, 0, 0, 0.3);
+  /* Fildişi yüz: üstte ışık, altta en koyu ton (#efe5d0). */
+  background: linear-gradient(180deg, var(--tile-face-hi) 0%, var(--tile-face) 48%, #efe5d0 100%);
+  box-shadow: var(--tile-shadow);
   color: var(--c, var(--black));
-  font-size: calc(var(--tile-w) * 0.54);
+  font-family: var(--font-ui);
+  font-size: calc(var(--tile-w) * 0.56);
   font-weight: 800;
   line-height: 1;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-  transition: transform 0.09s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.12s ease;
+  transition: transform 0.12s var(--ease), box-shadow 0.12s ease;
   overflow: hidden;
 }
 
-/* Üst bevel: kenarın ışık alması. */
+/* Pah: yüzün içinde ince bir çerçeve; üst kenarı ışık alır, alt kenarı gölgede. */
 .tile::before {
   content: '';
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 34%;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 62%);
+  inset: calc(var(--tile-w) * 0.06);
+  border-radius: calc(var(--tile-w) * 0.1);
+  box-shadow: inset 0 1px 1px rgba(110, 82, 38, 0.2), 0 1px 0 rgba(255, 255, 255, 0.85);
   pointer-events: none;
 }
 
@@ -1016,9 +1228,15 @@ details.menu[open] > summary {
 .tile[data-color='black'] { --c: var(--black); }
 .tile.fake { --c: var(--fake); }
 
+.tile .value {
+  position: relative;
+}
+
 .tile .mark {
-  font-size: 0.38em;
+  font-size: 0.4em;
+  letter-spacing: 0;
   opacity: 0.85;
+  font-family: system-ui, 'Segoe UI Symbol', sans-serif;
 }
 
 /* The colour-blind set (Menu > Tile colours). Chosen by simulating protanopia, deuteranopia and tritanopia
@@ -1038,22 +1256,27 @@ details.menu[open] > summary {
   opacity: 1;
 }
 
-/* Marks the okey (wild) so players don't have to work it out from the indicator. */
+/* Marks the okey (wild) so players don't have to work it out from the indicator: a brass stud. */
 .tile.wild::after {
   content: '';
   position: absolute;
-  top: 6%;
-  right: 8%;
+  top: 7%;
+  right: 9%;
   width: 18%;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  background: radial-gradient(circle at 40% 35%, var(--brass-hi), var(--brass) 60%, var(--brass-deep));
+  box-shadow: 0 0 0 1px rgba(80, 55, 15, 0.45), 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 
+/* Kapalı taş: koyu yeşim sırt, içte ince fildişi bir çerçeve. */
 .tile.back {
-  background: linear-gradient(160deg, #2f8a61, #1b5c40);
-  border-color: #134a33;
+  background: linear-gradient(180deg, var(--tile-back-hi), var(--tile-back-lo));
+  border-color: #123828;
+}
+
+.tile.back::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 236, 190, 0.22), 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 button.tile {
@@ -1061,21 +1284,27 @@ button.tile {
   touch-action: none;
 }
 
+/* Fareyle üstüne gelince taş biraz kalkar; dokunmatikte "hover" takılı kalacağı için yalnızca fare. */
+@media (hover: hover) {
+  button.tile:hover:not(.selected) {
+    transform: translateY(-3%);
+  }
+}
+
 .tile.selected {
   transform: translateY(-14%);
   outline: 3px solid var(--accent);
   outline-offset: 1px;
   box-shadow:
-    0 calc(var(--tile-w) * 0.11) 0 var(--tile-side),
-    0 1px 0 rgba(0, 0, 0, 0.28),
-    0 10px 18px rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 calc(var(--tile-w) * 0.1) 0 var(--tile-side),
+    0 calc(var(--tile-w) * 0.1 + 1px) 0 rgba(70, 50, 20, 0.45),
+    0 calc(var(--tile-w) * 0.3) calc(var(--tile-w) * 0.32) rgba(0, 0, 0, 0.42);
 }
 
+/* Yeni çekilen taş: ince bir pirinç halka (seçilince kalın çerçeve ve kalkma ile ayrılır). */
 .tile.fresh {
-  box-shadow:
-    0 calc(var(--tile-w) * 0.075) 0 var(--tile-side),
-    0 0 0 2px #81c784,
-    0 3px 7px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--tile-shadow), 0 0 0 2px rgba(var(--accent-rgb), 0.8);
 }
 
 .tile.drag-source {
@@ -1091,8 +1320,9 @@ button.tile {
   transition: none;
   cursor: grabbing;
   box-shadow:
-    0 calc(var(--tile-w) * 0.075) 0 var(--tile-side),
-    0 14px 26px rgba(0, 0, 0, 0.5);
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 calc(var(--tile-w) * 0.07) 0 var(--tile-side),
+    0 calc(var(--tile-w) * 0.4) calc(var(--tile-w) * 0.5) rgba(0, 0, 0, 0.5);
 }
 
 /* ---- Result dialog --------------------------------------------------------- */
@@ -1106,9 +1336,10 @@ button.tile {
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.62);
+  background: rgba(3, 12, 8, 0.68);
 }
 
+/* Krem kağıt: koyu yazı, tek başlık stili, aşağı düşen tek gölge. */
 .modal {
   width: min(440px, 100%);
   /* The backdrop's grid row grows with content, so a % height would not cap it. */
@@ -1117,12 +1348,19 @@ button.tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 22px 20px;
-  border-radius: 18px;
-  background: #fffaf0;
-  color: #222;
+  padding: 24px 20px 20px;
+  border-radius: 16px;
+  /* Düz renk gradyanın en koyu tonu: kontrast denetimi bunu ölçer. */
+  background: var(--paper-lo) linear-gradient(180deg, var(--paper), var(--paper-lo));
+  color: var(--paper-ink);
   text-align: center;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(90, 68, 30, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 6px 14px rgba(0, 0, 0, 0.25), 0 24px 48px rgba(0, 0, 0, 0.45);
+}
+
+.modal :focus-visible {
+  outline: 2px solid var(--paper-ink);
+  outline-offset: 3px;
 }
 
 .modal-body {
@@ -1134,6 +1372,21 @@ button.tile {
 .modal h2 {
   margin: 0;
   font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--paper-ink);
+}
+
+/* Başlığın altında kısa bir pirinç çizgi: her kartta aynı. */
+.modal h2::after {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 2px;
+  margin: 10px auto 0;
+  border-radius: 1px;
+  background: var(--brass);
 }
 
 /* Kurallar kartı: maddeler halinde, kısa ve okunaklı. */
@@ -1144,38 +1397,46 @@ button.tile {
 .modal.coach h2 {
   text-align: center;
   font-size: 20px;
-  color: #1f4d33;
+}
+
+/* Menünün alt kısmı (sayılar, istatistik ve kurallar düğmeleri) ortada. */
+.modal.menu .modal-body {
+  text-align: center;
 }
 
 .coach-list {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
 }
 
 .coach-list li {
   position: relative;
-  padding: 9px 12px 9px 34px;
-  border-radius: 10px;
-  background: #f2ede0;
+  padding: 10px 12px 10px 32px;
+  border-radius: 8px;
+  background: var(--paper-sunk);
   font-size: 14px;
-  line-height: 1.4;
-  color: #333;
+  line-height: 1.45;
+  color: #3a3026;
 }
 
+/* Madde imi: küçük pirinç bir baklava. */
 .coach-list li::before {
-  content: '✓';
+  content: '';
   position: absolute;
-  left: 12px;
-  top: 9px;
-  color: #1f6f4a;
-  font-weight: 800;
+  left: 13px;
+  top: 17px;
+  width: 7px;
+  height: 7px;
+  background: var(--brass);
+  box-shadow: 0 0 0 1px var(--brass-deep);
+  transform: rotate(45deg);
 }
 
-/* Rakip zorluğu: kurallar kartının altında. */
+/* Ayar satırları: solda etiket, sağda segmentli kontrol (seçili parça pirinç dolu). */
 .difficulty {
   display: flex;
   /* A label and three buttons do not fit side by side on a narrow phone, or in a language with long
@@ -1183,17 +1444,19 @@ button.tile {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 6px;
-  margin-top: 14px;
+  gap: 6px 0;
+  margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #e3dccc;
+  border-top: 1px solid var(--paper-line);
 }
 
 .difficulty .label {
   font-size: 13px;
   font-weight: 700;
-  color: #555;
+  color: var(--paper-ink-dim);
   margin-right: auto;
+  padding-right: 12px;
+  text-align: left;
   /* Long labels ("Gegner-Tempo") wrap inside their own row instead of pushing the buttons out. */
   max-width: 100%;
 }
@@ -1201,44 +1464,94 @@ button.tile {
 .difficulty .chip {
   min-height: 40px;
   padding: 4px 12px;
-  border: 1px solid #d8cdb4;
-  background: #f2ede0;
-  color: #444;
+  margin-left: -1px;
+  border: 1px solid #cdbd99;
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: none;
+  color: #3d3226;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
 }
 
+.difficulty .chip:hover {
+  background-color: #fbf1da;
+  border-color: #cdbd99;
+}
+
+.difficulty .label + .chip {
+  margin-left: 0;
+  border-radius: 10px 0 0 10px;
+}
+
+.difficulty .chip:last-child {
+  border-radius: 0 10px 10px 0;
+}
+
+.difficulty .label + .chip:last-child {
+  border-radius: 10px;
+}
+
 .difficulty .chip.on {
-  background: #1f6f4a;
-  border-color: #1f6f4a;
-  color: #fff;
+  position: relative;
+  z-index: 1;
+  background: var(--accent) linear-gradient(180deg, var(--brass-hi), var(--accent));
+  border-color: var(--brass-deep);
+  color: var(--accent-ink);
+  font-weight: 800;
+  box-shadow: inset 0 -1px 0 rgba(120, 85, 20, 0.35);
+}
+
+/* Menüdeki ikincil bağlantılar (istatistik, kurallar): çerçeveli, yan yana. */
+.modal-body > .chip:not(.daily):not(.new-match) {
+  margin: 8px 4px 0;
+  min-height: 44px;
+  padding: 6px 16px;
+  border: 1px solid #cdbd99;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: none;
+  color: var(--paper-ink);
+  font-weight: 700;
+}
+
+.modal-body > .chip:not(.daily):not(.new-match):hover {
+  background-color: #fbf1da;
 }
 
 .modal .detail,
 .modal .rule,
 .modal .lifetime {
-  margin: 6px 0 0;
-  color: #555;
+  margin: 8px 0 0;
+  color: var(--paper-ink-dim);
   font-size: 14px;
 }
 
-/* The statistics screen: a label on the left, its number on the right. */
+/* The statistics screen: a label on the left, its number on the right, a hairline between rows. */
 .modal .stats {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 8px 16px;
-  margin: 12px 0 0;
+  gap: 0;
+  margin: 16px 0 0;
   text-align: left;
   font-size: 15px;
 }
 
+.modal .stats dt,
+.modal .stats dd {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--paper-line);
+}
+
 .modal .stats dt {
-  color: #555;
+  color: var(--paper-ink-dim);
 }
 
 .modal .stats dd {
   margin: 0;
-  font-weight: 700;
+  padding-left: 16px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -1249,8 +1562,9 @@ button.tile {
   padding: 6px 14px;
   display: inline-block;
   border-radius: 999px;
-  background: #1f6f4a;
-  color: #fff;
+  background: #f6e7c4;
+  border: 1px solid #d3ab55;
+  color: #5a3d08;
   font-size: 14px;
   font-weight: 700;
 }
@@ -1258,34 +1572,36 @@ button.tile {
 .modal .rule,
 .modal .lifetime {
   font-size: 13px;
-  color: #6b6b6b;
+  color: var(--paper-ink-faint);
 }
 
 .modal .seed {
   margin: 8px 0 0;
-  padding: 5px 10px;
+  padding: 4px 8px;
   display: inline-block;
   border-radius: 8px;
-  background: #eef2f6;
-  color: #4a5a63;
+  background: #ece3d0;
+  color: #5a4f42;
   font-size: 12px;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   word-break: break-all;
 }
 
+/* Maç bitti: kartın tepesinde çuha renginde bir şerit. */
 .modal .match-over {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: #1f6f4a;
-  color: #fff;
-  font-size: 17px;
+  border-radius: 12px;
+  background: #173f2d;
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+  color: var(--ink);
+  font-size: 16px;
   font-weight: 800;
 }
 
 .scores {
   width: 100%;
-  margin: 12px 0 4px;
+  margin: 16px 0 4px;
   border-collapse: collapse;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -1293,8 +1609,8 @@ button.tile {
 
 .scores th,
 .scores td {
-  padding: 5px 8px;
-  border-bottom: 1px solid #e8dfcc;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--paper-line);
   text-align: right;
 }
 
@@ -1303,22 +1619,27 @@ button.tile {
 }
 
 .scores thead th {
-  color: #6b6b6b;
+  color: var(--paper-ink-faint);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .scores tbody th {
-  font-weight: 600;
+  font-weight: 700;
+}
+
+.scores tbody td:last-child {
+  font-weight: 800;
 }
 
 .scores tr.winner th::after {
   content: ' ★';
-  color: #9a5500;
+  color: #8a4d00;
 }
 
 .scores tr.leader {
-  background: #eef7f1;
+  background: #f5e9cc;
 }
 
 .scores tr.out td:last-child {
@@ -1332,8 +1653,13 @@ button.tile {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 4px calc(var(--tile-w) * 0.45);
-  margin: 14px 0 4px;
+  gap: calc(var(--tile-w) * 0.2) calc(var(--tile-w) * 0.45);
+  margin: 16px 0 4px;
+  padding: 12px 8px calc(12px + var(--tile-w) * 0.1);
+  border-radius: 12px;
+  /* Kazanan el çuhanın üstünde gösterilir: taşlar her yerde aynı zeminde. */
+  background: radial-gradient(ellipse at 50% 30%, var(--felt-hi), var(--felt-mid) 90%);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 .modal .meld {
@@ -1346,6 +1672,10 @@ button.tile {
     padding: 12px 16px;
   }
 
+  .modal h2::after {
+    margin-top: 6px;
+  }
+
   .modal .rule,
   .modal .lifetime,
   .modal .seed {
@@ -1354,6 +1684,8 @@ button.tile {
 
   .modal .hand {
     margin-top: 8px;
+    padding-top: 6px;
+    padding-bottom: calc(6px + var(--tile-w) * 0.1);
   }
 
   .scores {
@@ -1370,35 +1702,68 @@ button.tile {
   }
 }
 
+/* Birincil düğme: pirinç dolgu, koyu yazı, altında kalınlık (ışık yukarıdan). */
 .primary {
   flex: none;
-  margin-top: 14px;
-  min-height: 44px;
+  margin-top: 16px;
+  min-height: 48px;
+  min-width: 160px;
   padding: 10px 28px;
   border: 0;
-  border-radius: 999px;
-  background: #1f6f4a;
-  color: #fff;
+  border-radius: 12px;
+  background: var(--accent) linear-gradient(180deg, var(--brass-hi), var(--accent) 55%, var(--brass) 100%);
+  color: var(--accent-ink);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 0 var(--brass-deep), 0 6px 12px rgba(80, 55, 15, 0.22);
   cursor: pointer;
+  transition: transform 0.12s var(--ease), box-shadow 0.12s;
 }
 
-.primary:focus-visible {
-  outline-color: #1f6f4a;
+.primary:hover {
+  background: var(--brass-hi);
+}
+
+.primary:active,
+.modal .daily:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 var(--brass-deep), 0 2px 6px rgba(80, 55, 15, 0.2);
+}
+
+/* Menü ve istatistikte "Kapat" / "Geri" birincil değil: birincil hamle günün eli. */
+.modal.menu .primary {
+  border: 1px solid #b89a5e;
+  background: var(--paper);
+  color: var(--paper-ink);
+  font-weight: 700;
+  box-shadow: 0 1px 0 rgba(120, 90, 40, 0.18);
+}
+
+.modal.menu .primary:hover {
+  background: #fbf1da;
 }
 
 /* ---- Motion ----------------------------------------------------------------- */
 
 @keyframes glow {
   50% {
-    box-shadow: 0 0 0 5px rgba(255, 201, 74, 0.25);
+    box-shadow: 0 0 0 5px rgba(var(--accent-rgb), 0.25);
   }
 }
 
-@keyframes blink {
+@keyframes ring-pulse {
   50% {
-    opacity: 0.3;
+    outline-color: rgba(var(--accent-rgb), 0.35);
+  }
+}
+
+@keyframes splash-pulse {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }
 
@@ -1444,8 +1809,8 @@ button.tile {
 
 /* Dağıtım: taşlar kademeli olarak belirir. */
 .tile.dealing {
-  animation: deal-in 0.24s cubic-bezier(0.2, 0, 0, 1) backwards;
-  /* Kademeli dagitim: her tas bir öncekinden sonra iner's */
+  animation: deal-in 0.26s var(--ease) backwards;
+  /* Kademeli dağıtım: her taş bir öncekinden sonra iner. */
   animation-delay: calc(var(--i, 0) * 38ms);
 }
 
@@ -1462,14 +1827,14 @@ button.tile {
   filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
 }
 
-/* Sırası gelen oyuncunun nabzı: kimin oynadığı belli olsun. */
+/* Sırası gelen oyuncunun halkası nabız gibi atar: kimin oynadığı belli olsun, ama bağırmasın. */
 .seat.active .avatar {
   animation: seat-pulse 1.7s ease-in-out infinite;
 }
 
 @keyframes seat-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.07); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.28), 0 3px 6px rgba(0, 0, 0, 0.35); }
+  50% { box-shadow: 0 0 0 7px rgba(var(--accent-rgb), 0.08), 0 3px 6px rgba(0, 0, 0, 0.35); }
 }
 
 /* Per ya da seri tamamlandı: taşlar yeşil parlar. */
@@ -1478,9 +1843,9 @@ button.tile {
 }
 
 @keyframes meld-flash {
-  0% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 0 0 0 rgba(122, 222, 160, 0.9), 0 3px 7px rgba(0, 0, 0, 0.3); }
-  60% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 0 0 10px rgba(122, 222, 160, 0), 0 3px 7px rgba(0, 0, 0, 0.3); }
-  100% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 1px 0 rgba(0, 0, 0, 0.28), 0 3px 7px rgba(0, 0, 0, 0.3); }
+  0% { box-shadow: var(--tile-shadow), 0 0 0 0 rgba(122, 222, 160, 0.9); }
+  60% { box-shadow: var(--tile-shadow), 0 0 0 10px rgba(122, 222, 160, 0); }
+  100% { box-shadow: var(--tile-shadow); }
 }
 
 /* Gösterge gösterildi: taş altın parlar. */
@@ -1489,9 +1854,9 @@ button.tile {
 }
 
 @keyframes indicator-flash {
-  0% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 0 0 0 rgba(255, 201, 74, 0.95), 0 3px 7px rgba(0, 0, 0, 0.3); }
-  60% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 0 0 14px rgba(255, 201, 74, 0), 0 3px 7px rgba(0, 0, 0, 0.3); }
-  100% { box-shadow: 0 calc(var(--tile-w) * 0.075) 0 var(--tile-side), 0 1px 0 rgba(0, 0, 0, 0.28), 0 3px 7px rgba(0, 0, 0, 0.3); }
+  0% { box-shadow: var(--tile-shadow), 0 0 0 0 rgba(var(--accent-rgb), 0.95); }
+  60% { box-shadow: var(--tile-shadow), 0 0 0 14px rgba(var(--accent-rgb), 0); }
+  100% { box-shadow: var(--tile-shadow); }
 }
 
 /* Duraklatıldığında her şey donar. */

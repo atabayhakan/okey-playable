@@ -130,8 +130,9 @@ export function flash(element: HTMLElement, className: string): void {
 export function winPulse(element: HTMLElement, duration = FLASH_MS): Animation | null {
   return element.animate(
     [
-      { boxShadow: 'inset 0 0 0 0 rgba(255, 201, 74, 0.7)' },
-      { boxShadow: 'inset 0 0 0 40px rgba(255, 201, 74, 0)' },
+      // The brass accent of styles.css (--accent-rgb).
+      { boxShadow: 'inset 0 0 0 0 rgba(240, 196, 99, 0.7)' },
+      { boxShadow: 'inset 0 0 0 40px rgba(240, 196, 99, 0)' },
     ],
     { duration, easing: 'ease-out' },
   );

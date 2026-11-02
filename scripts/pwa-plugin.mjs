@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 /** The felt, as the page and the launcher's bar are coloured. */
-export const THEME_COLOR = '#14402e';
-export const BACKGROUND_COLOR = '#0a2318';
+export const THEME_COLOR = '#113a29';
+export const BACKGROUND_COLOR = '#071c13';
 
 /** The app icons: the 512 px one is also the maskable one (the tiles stay in the middle 68% of it). */
 const ICONS = [

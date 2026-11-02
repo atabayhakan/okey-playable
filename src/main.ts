@@ -1,3 +1,6 @@
+// The UI typeface, bundled (OFL): Playables may not load a font from anywhere else. Each subset is a woff2 with a
+// unicode-range, so a browser fetches only the ones the language needs (Latin, plus Latin Extended for tr/az).
+import '@fontsource-variable/plus-jakarta-sans/wght.css';
 import './ui/styles.css';
 import { Controller } from './app/controller';
 import { emptySave, parseSave } from './app/save';
