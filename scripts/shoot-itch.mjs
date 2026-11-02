@@ -2,114 +2,20 @@
 //
 //   npm run build:web && node scripts/shoot-itch.mjs
 //
-// Serves dist-web/ itself, plays a few moves in headless Chrome so the table shows
-// discards, and writes store/itch/*.png. Needs Chrome (CHROME_PATH overrides the lookup).
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, extname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+// Serves dist-web/ itself (scripts/lib/browser.mjs), plays a few moves in headless Chrome so the table shows
+// discards, and writes store/itch/*.png. Needs Chrome or Edge (CHROME_PATH overrides the lookup).
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { launch, root, sleep } from './lib/browser.mjs';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const webDir = join(root, 'dist-web');
 const outDir = join(root, 'store', 'itch');
-if (!existsSync(join(webDir, 'index.html'))) {
-  console.error('dist-web/ is missing. Run npm run build:web first.');
-  process.exit(1);
-}
 mkdirSync(outDir, { recursive: true });
 
-const chromePath = [
-  process.env.CHROME_PATH,
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  join(process.env.LOCALAPPDATA ?? '', 'ms-playwright', 'chromium-1248', 'chrome-win64', 'chrome.exe'),
-]
-  .filter(Boolean)
-  .find((p) => existsSync(p));
-if (!chromePath) {
-  console.error('No Chrome found. Set CHROME_PATH and run again.');
-  process.exit(1);
-}
+const { send, evaluate, freshGame, finish, close } = await launch('build:web');
 
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
-const server = createServer((req, res) => {
-  const path = join(webDir, req.url === '/' || req.url?.startsWith('/?') ? 'index.html' : (req.url ?? '').split('?')[0]);
-  if (!path.startsWith(webDir) || !existsSync(path)) {
-    res.writeHead(404).end();
-    return;
-  }
-  res.writeHead(200, { 'content-type': TYPES[extname(path)] ?? 'application/octet-stream' }).end(readFileSync(path));
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const base = `http://127.0.0.1:${server.address().port}/`;
-
-const port = 9700 + Math.floor(Math.random() * 200);
-const chrome = spawn(
-  chromePath,
-  [
-    '--headless=new',
-    '--disable-gpu',
-    '--hide-scrollbars',
-    '--no-first-run',
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${mkdtempSync(join(tmpdir(), 'okey-itch-'))}`,
-    'about:blank',
-  ],
-  { stdio: 'ignore' },
-);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-let target;
-for (let i = 0; i < 80 && !target; i++) {
-  try {
-    target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
-  } catch {
-    /* still starting */
-  }
-  if (!target) await sleep(150);
-}
-if (!target) {
-  console.error('Chrome did not start.');
-  process.exit(1);
-}
-
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((res, rej) => {
-  ws.addEventListener('open', res, { once: true });
-  ws.addEventListener('error', rej, { once: true });
-});
-let nextId = 0;
-const pending = new Map();
-const waiting = new Map();
-ws.addEventListener('message', (ev) => {
-  const msg = JSON.parse(ev.data);
-  if (msg.id && pending.has(msg.id)) {
-    const { resolve, reject, method } = pending.get(msg.id);
-    pending.delete(msg.id);
-    msg.error ? reject(new Error(`${method}: ${JSON.stringify(msg.error)}`)) : resolve(msg.result);
-  } else if (msg.method && waiting.has(msg.method)) {
-    waiting.get(msg.method).splice(0).forEach((fn) => fn(msg.params));
-  }
-});
-const send = (method, params = {}) =>
-  new Promise((resolve, reject) => {
-    const id = ++nextId;
-    pending.set(id, { resolve, reject, method });
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-const once = (method) => new Promise((resolve) => waiting.set(method, [...(waiting.get(method) ?? []), resolve]));
-const evaluate = async (expression) => {
-  const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-  if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'evaluate failed');
-  return r.result.value;
-};
-
-await send('Page.enable');
-await send('Runtime.enable');
+// Pictures of a still table: with reduced motion the game draws no flights, fades or pulses, so no tile is
+// caught half way across the felt and no status bar half faded in (the game honours the setting, DESIGN.md 2.5).
+await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
 
 /** Close the rules card, take a tile from the pile, throw one, and let the bots answer. */
 const PLAY = `(async () => {
@@ -133,11 +39,38 @@ const PLAY = `(async () => {
   return document.querySelectorAll('.rack [data-tile-id]').length;
 })()`;
 
+/** The player's rack put in order (Arrange > by sets), as a player would have it: groups with gaps between. */
+const ARRANGE = `(async () => {
+  document.querySelector('[data-action="sort-melds"]')?.click();
+  await new Promise((r) => setTimeout(r, 400));
+  document.querySelector('details.menu')?.removeAttribute('open');
+  return document.querySelectorAll('.rack .tile.melded').length;
+})()`;
+
+/**
+ * One more move of the player's, then the picture is taken while the next bot thinks: on a 390 px phone the
+ * player's own prompts ("Draw from the pile, or take from your left") are longer than the status bar and end
+ * in an ellipsis, a bot's turn ("Ali is thinking...") fits, and its seat wears the brass ring.
+ */
+const BOT_TURN = `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const click = (s) => document.querySelector(s)?.click();
+  click('button.pile');
+  await wait(500);
+  (document.querySelector('.rack .tile.fresh') || document.querySelector('.rack [data-tile-id]'))?.click();
+  await wait(200);
+  click('button.discard[data-action="discard"]');
+  await wait(450);
+  const text = document.querySelector('.status-text');
+  return { active: Boolean(document.querySelector('.seat.active')), clipped: text ? text.scrollHeight > text.clientHeight + 1 : false };
+})()`;
+
 const SHOTS = [
-  { file: 'itch-1-table.png', width: 1280, height: 720, scale: 1, lang: 'en' },
-  { file: 'itch-2-table-tr.png', width: 1280, height: 720, scale: 1, lang: 'tr' },
-  { file: 'itch-3-phone.png', width: 390, height: 844, scale: 2, lang: 'en', mobile: true },
-  { file: 'itch-cover-630x500.png', width: 630, height: 500, scale: 1, lang: 'en' },
+  // A fixed seed for each, so a run again gives the same deal; the two tables are different deals.
+  { file: 'itch-1-table.png', width: 1280, height: 720, scale: 1, lang: 'en', seed: 9, arrange: true },
+  { file: 'itch-2-table-tr.png', width: 1280, height: 720, scale: 1, lang: 'tr', seed: 4 },
+  { file: 'itch-3-phone.png', width: 390, height: 844, scale: 2, lang: 'en', seed: 9, mobile: true, botTurn: true },
+  { file: 'itch-cover-630x500.png', width: 630, height: 500, scale: 1, lang: 'en', seed: 9, arrange: true, botTurn: true },
 ];
 
 for (const shot of SHOTS) {
@@ -147,23 +80,21 @@ for (const shot of SHOTS) {
     deviceScaleFactor: shot.scale,
     mobile: Boolean(shot.mobile),
   });
-  await send('Page.navigate', { url: 'about:blank' });
-  await sleep(100);
-  const loaded = once('Page.loadEventFired');
-  await send('Page.navigate', { url: `${base}?lang=${shot.lang}` });
-  await loaded;
-  await evaluate('localStorage.clear()');
-  const reloaded = once('Page.loadEventFired');
-  await send('Page.reload');
-  await reloaded;
-  await sleep(800);
+  await freshGame(`lang=${shot.lang}&seed=${shot.seed}`);
+  await sleep(500);
   const tiles = await evaluate(PLAY);
+  if (shot.arrange) await evaluate(ARRANGE);
+  if (shot.botTurn) {
+    const state = await evaluate(BOT_TURN);
+    if (!state.active || state.clipped) console.warn(`${shot.file}: not the moment wanted (${JSON.stringify(state)})`);
+  }
+  // No focus ring in a picture: the clicks above can leave a button focused.
+  await evaluate('document.activeElement?.blur()');
+  await sleep(150);
   const image = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   writeFileSync(join(outDir, shot.file), Buffer.from(image.data, 'base64'));
-  console.log('saved', shot.file, `${shot.width}x${shot.height}@${shot.scale}x`, `(${tiles} tiles on the rack)`);
+  console.log('saved', shot.file, `${shot.width * shot.scale}x${shot.height * shot.scale}`, `(${tiles} tiles on the rack)`);
 }
 
-ws.close();
-chrome.kill();
-server.close();
-process.exit(0);
+close();
+finish(0);

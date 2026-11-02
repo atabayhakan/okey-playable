@@ -3,4 +3,6 @@ dist/
 dist-web/
 release/
 store/index.css
+# Screenshots of the design, regenerated with `node scripts/shoot-design.mjs` (2.5 MB that would change often).
+docs/design-shots/
 *.log

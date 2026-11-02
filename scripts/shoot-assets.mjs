@@ -9,7 +9,7 @@
 // Needs Chrome. It reuses the built stylesheet, so the art always matches the
 // game. Edit store/art.html to change the composition and run it again.
 import { spawn } from 'node:child_process';
-import { readdirSync, writeFileSync, mkdtempSync, copyFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +23,7 @@ const CHROME_CANDIDATES = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   join(process.env.LOCALAPPDATA ?? '', 'ms-playwright', 'chromium-1248', 'chrome-win64', 'chrome.exe'),
 ].filter(Boolean);
 
@@ -32,13 +33,23 @@ if (!chromePath) {
   process.exit(1);
 }
 
-const cssFile = readdirSync(distAssets).find((f) => f.endsWith('.css'));
+const cssFile = existsSync(distAssets) && readdirSync(distAssets).find((f) => f.endsWith('.css'));
 if (!cssFile) {
   console.error('No built stylesheet. Run npm run build first.');
   process.exit(1);
 }
-// The page links to ./index.css, so the stylesheet has to sit next to it.
-copyFileSync(join(distAssets, cssFile), join(storeDir, 'index.css'));
+// The page links to ./index.css, so the stylesheet has to sit next to it. The stylesheet loads the bundled
+// font from files next to itself (url(./plus-jakarta-sans-...woff2)); those are put inside it as data URLs, so
+// the copy works on its own and a page opened from file:// is not refused the font.
+const css = readFileSync(join(distAssets, cssFile), 'utf8').replace(/url\((['"]?)\.\/([^)'"]+\.woff2)\1\)/g, (whole, _q, name) => {
+  const font = join(distAssets, name);
+  if (!existsSync(font)) {
+    console.error(`The stylesheet names ${name}, which is not in dist/assets. Run npm run build again.`);
+    process.exit(1);
+  }
+  return `url(data:font/woff2;base64,${readFileSync(font).toString('base64')})`;
+});
+writeFileSync(join(storeDir, 'index.css'), css);
 
 const port = 9300 + Math.floor(Math.random() * 400);
 const profile = mkdtempSync(join(tmpdir(), 'okey-art-'));
@@ -112,28 +123,48 @@ const once = (method) =>
 await send('Page.enable');
 await send('Runtime.enable');
 
+// `width` and `height` are CSS pixels (what art.html lays out), `scale` the density: the 1024 icon is the
+// 512 one drawn at twice the density, so the two are the same picture.
 const SHOTS = [
-  { view: 'icon', file: 'okey-icon-512.png', width: 512, height: 512 },
-  { view: 'icon', file: 'okey-icon-1024.png', width: 1024, height: 1024 },
-  { view: 'cover', file: 'okey-cover-1280x720.png', width: 1280, height: 720 },
-  { view: 'portrait', file: 'okey-cover-1080x1920.png', width: 1080, height: 1920 },
+  { view: 'icon', file: 'okey-icon-512.png', width: 512, height: 512, scale: 1 },
+  { view: 'icon', file: 'okey-icon-1024.png', width: 512, height: 512, scale: 2 },
+  { view: 'cover', file: 'okey-cover-1280x720.png', width: 1280, height: 720, scale: 1 },
+  { view: 'portrait', file: 'okey-cover-1080x1920.png', width: 1080, height: 1920, scale: 1 },
 ];
+
+const evaluate = async (expression) => {
+  const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'evaluate failed');
+  return r.result.value;
+};
 
 const artFile = join(storeDir, 'art.html').replace(/\\/g, '/');
 for (const shot of SHOTS) {
   await send('Emulation.setDeviceMetricsOverride', {
     width: shot.width,
     height: shot.height,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: shot.scale,
     mobile: false,
   });
   const loaded = once('Page.loadEventFired');
   await send('Page.navigate', { url: `file:///${artFile}?view=${shot.view}` });
   await loaded;
-  await sleep(600);
+  // The page names itself ready-<view> once it is laid out and the font is in.
+  let ready = false;
+  for (let t = 0; t < 50 && !ready; t++) {
+    ready = (await evaluate('document.title')) === `ready-${shot.view}`;
+    if (!ready) await sleep(100);
+  }
+  const font = await evaluate(`[...document.fonts].some((f) => f.family.includes('Plus Jakarta Sans') && f.status === 'loaded')`);
+  if (!ready || !font) {
+    console.error(`${shot.file}: the page was not ready${font ? '' : ' (the bundled font did not load)'}.`);
+    chrome.kill();
+    process.exit(1);
+  }
+  await sleep(200);
   const image = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   writeFileSync(join(storeDir, shot.file), Buffer.from(image.data, 'base64'));
-  console.log('saved', shot.file, `${shot.width}x${shot.height}`);
+  console.log('saved', shot.file, `${shot.width * shot.scale}x${shot.height * shot.scale}`);
 }
 
 ws.close();

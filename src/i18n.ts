@@ -93,7 +93,7 @@ const en = {
   pileLow: 'running low',
   matchLengthLabel: 'Match',
   matchLength: { short: 'Short', classic: 'Classic', long: 'Long' },
-  coloredOkeyLabel: 'Colored okey',
+  coloredOkeyLabel: 'Coloured okey',
   singleColorLabel: 'Single colour finish',
   singleColorDone: 'Finished in one colour!',
   on: 'On',

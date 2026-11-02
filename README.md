@@ -27,6 +27,8 @@ npm run check:ui     # web derlemesinde arayüzden 3 el + günün elini oynar (b
 npm run check:pwa    # web derlemesi uygulama gibi çalışıyor mu: Chrome "kurulabilir" diyor mu, manifest ve simgeler doğru mu,
                      # service worker derlemenin tüm dosyalarını tutuyor mu, ağ kapalıyken oyun açılıp oynanıyor mu;
                      # Playables derlemesinde bunlardan hiçbiri olmamalı (CI'da çalışır)
+node scripts/shoot-design.mjs  # tasarım incelemesi için docs/design-shots/*.png (1x; masa, menü, kurallar, istatistik,
+                               # sonuç, renk körü palet, splash; tr/az/de). Önce npm run build:web; ad verilirse yalnızca o
 ```
 
 Arayüz denetimleri `scripts/lib/browser.mjs` ortak modülünü kullanır (Chrome'u açar, `dist-web/`'i sunar).

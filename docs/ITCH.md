@@ -83,8 +83,9 @@ node scripts/shoot-itch.mjs  # store/itch/*.png (gerçek oyundan ekran görünt�
 - ZIP'te `sw.js`, `manifest.webmanifest` ve `icons/` da var: oyun kurulabilir ve çevrimdışı çalışır. itch.io
   oyunu bir iframe içinde açtığı için tarayıcı orada service worker kaydını reddedebilir; bu durumda oyun
   normal çalışır, yalnızca çevrimdışı oynama ve kurulum olmaz. Gerçek itch.io sayfasında denenmedi.
-- Sayfadaki ekran görüntüleri (`store/itch/*.png`) eski arayüzden: yeni sürümü yüklerken
-  `node scripts/shoot-itch.mjs` ile yenilenebilir.
+- Ekran görüntüleri (`store/itch/*.png`) ve kapak 3 Kasım 2026'da yeni görünümle (`docs/DESIGN.md`) yeniden
+  üretildi (`node scripts/shoot-itch.mjs`). itch.io sayfasındakiler hâlâ eskileri: yeni sürümü yüklerken bunlar da
+  yüklenmeli.
 - Sürüm numarası hâlâ 0.2.0 (ZIP adı `okey-web-v0.2.0.zip`); önceki yüklemeyle aynı ad, içeriği yeni.
 - 1 Kasım 2026'da yeni sürüm yüklendi ve sayfa metni güncellendi (günün eli, istatistik, renk körü paleti, beş dil).
   itch.io, aynı adlı dosyayı yüklerken eskisini yerinde değiştirdi. Sayfadaki metin yukarıdaki açıklamalardan

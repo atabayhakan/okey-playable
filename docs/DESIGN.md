@@ -105,3 +105,8 @@ kartı, istatistik, sonuç ekranı; renk körü palet açık.
 - Simgeler: `src/pwa/icon-192.png`, `icon-512.png` ← `store/okey-icon-512.png` (`node scripts/make-icons.mjs`).
 - Mağaza görselleri: `store/art.html` + `npm run assets` (`scripts/shoot-assets.mjs`, Chrome ile render);
   itch.io ekran görüntüleri `node scripts/shoot-itch.mjs`. Yeni görünüm bunlara da yansımalı.
+- Tasarım incelemesi görüntüleri: `docs/design-shots/*.png` (git'e girmez, istendiğinde üretilir) ←
+  `node scripts/shoot-design.mjs [ad ...]` (önce
+  `npm run build:web`; 1x yoğunluk, odak halkası çekimden önce kaldırılır, splash `index.html`'deki işaretlemeden
+  alınır). Bölüm 2.6'daki "gözle" listesinin sahneleri: masa (390×844, 360×640 az, 568×320 tr, 1280×720 de),
+  seçili taş + ipucu, kurallar kartı, menü, istatistik, sonuç, renk körü palet, splash.
